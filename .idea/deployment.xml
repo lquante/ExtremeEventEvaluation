@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="PublishConfigData" autoUpload="Always" serverName="PIK_cluster_home">
+    <serverData>
+      <paths name="PIK_cluster_home">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/ExtremeEventEvaluation" local="$PROJECT_DIR$" web="/" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="PIK_cluster_tmp">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/ExtremeEventEvaluation" local="$PROJECT_DIR$" web="/" />
+          </mappings>
+        </serverdata>
+      </paths>
+    </serverData>
+    <option name="myAutoUpload" value="ALWAYS" />
+  </component>
+</project>
