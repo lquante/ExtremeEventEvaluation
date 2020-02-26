@@ -165,3 +165,4 @@ plt.savefig((plotname + "_density"))
 plt.close()
 
 iris.save(target_area_data, outputdir + '/' + data_identifier + '_area_analysis.nc')
+
