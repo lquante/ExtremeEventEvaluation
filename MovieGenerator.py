@@ -1,3 +1,7 @@
+#!/usr/bin/env python
+
+import argparse
+import os
 from datetime import datetime
 
 import iris
@@ -7,6 +11,8 @@ import iris.plot as iplt
 import iris.quickplot as qplt
 import matplotlib.pyplot as plt
 from iris.analysis import Aggregator
+from iris.experimental.equalise_cubes import equalise_attributes
+from ruamel.yaml import ruamel
 
 from matplotlib.animation import FuncAnimation
 
@@ -18,18 +24,55 @@ def load_data_from_netcdf(filepath):
     return data
 
 
-def get_cube_from_cubelist(data, variablename):
+def filter_cubes_from_cubelist(data, variablename):
     filtered_cubelist = data.extract(variablename)
-    return filtered_cubelist[0]
+    return filtered_cubelist
 
 
-# Some global variables to define the whole run
-basic_data = load_data_from_netcdf(
-    "/home/quante/projects/extremesnowevents/Climate_Data_Central/output_MPI-ESM1-2-HR_ssp585_20952099.nc")
-data_name = "Daily snowfall"
-data_identifier = "MPI-ESM1-2-HR_ssp585"
+# settings file import
+# argument parser definition
+parser = argparse.ArgumentParser(description="Generate a movie on the time dimension of Geo-referenced netcdf file(s)")
+# path to *.yml file with settings to be used
+parser.add_argument(
+    "--settings"
+    , type=str,
+    help="Path to the settingsfile (default: CURRENT/settings.yml)"
+)
 
-variable_data = get_cube_from_cubelist(basic_data, "approx_fresh_daily_snow_height")
+args = parser.parse_args()
+
+# default settings
+if not args.settings:
+    args.settings = os.path.join(os.getcwd(), 'settings.yml')
+
+
+# load settings file
+yaml = ruamel.yaml.YAML()
+with open(args.settings, 'r') as stream:
+    try:
+        settings = yaml.load(stream)
+    except yaml.YAMLError as exc:
+        print(exc)
+
+data_input = settings["data"]
+variable_to_plot = settings ["variable"]
+data_identifier = settings ["data_identifier"]
+outputdir = settings ["output"]
+
+# load data from (list of) filepaths
+basic_data = load_data_from_netcdf(data_input)
+
+filtered_data = filter_cubes_from_cubelist(basic_data, variable_to_plot)
+
+if(len(filtered_data)>1):
+# unify attributes of cubes
+    equalise_attributes(filtered_data)
+# concatenate cubes
+    variable_data = filtered_data.concatenate_cube()
+else:
+    variable_data = filtered_data
+
+
 contours = np.arange(0, 1000, 10)
 
 # def plot function
@@ -64,7 +107,7 @@ print(empty_data)
 titled_world_map = plt.figure()
 first_date = datetime.fromordinal(int(time.points[0]) + start_shift)
 last_date = datetime.fromordinal(int(time.points[number_of_timepoints-1]) + start_shift)
-plt.title(data_name+ " from " + str(first_date) +" to "+str(last_date))
+plt.title(variable_to_plot+ " from " + str(first_date) +" to "+str(last_date))
 plt.suptitle(data_identifier)
 iris.plot.contourf(empty_data,contours, cmap='GnBu')
 plt.gca().coastlines()
@@ -83,4 +126,4 @@ animation = FuncAnimation(
 )
 
 # Try to set the DPI to the actual number of pixels you're plotting
-animation.save("movie_"+data_name+"_"+data_identifier+"_"+ str(first_date) +"_"+str(last_date)+".mp4", dpi=512)
+animation.save(outputdir+"/movie_"+variable_to_plot+"_"+data_identifier+"_"+ str(first_date) +"_"+str(last_date)+".mp4", dpi=128)
