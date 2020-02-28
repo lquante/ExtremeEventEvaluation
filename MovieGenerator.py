@@ -10,6 +10,7 @@ import numpy as np
 import iris.plot as iplt
 import iris.quickplot as qplt
 import matplotlib.pyplot as plt
+import matplotlib.animation as animation
 from iris.analysis import Aggregator
 from iris.experimental.equalise_cubes import equalise_attributes
 from ruamel.yaml import ruamel
@@ -70,7 +71,7 @@ if(len(filtered_data)>1):
 # concatenate cubes
     variable_data = filtered_data.concatenate_cube()
 else:
-    variable_data = filtered_data
+    variable_data = filtered_data [0]
 
 
 contours = np.arange(0, 1000, 10)
@@ -103,27 +104,30 @@ EMPTY_AGGREGATOR = Aggregator("zero function",zero_function)
 
 # initialize plot with world map data
 empty_data = variable_data.collapsed('time', iris.analysis.SUM)
-print(empty_data)
 titled_world_map = plt.figure()
 first_date = datetime.fromordinal(int(time.points[0]) + start_shift)
 last_date = datetime.fromordinal(int(time.points[number_of_timepoints-1]) + start_shift)
-plt.title(variable_to_plot+ " from " + str(first_date) +" to "+str(last_date))
-plt.suptitle(data_identifier)
+plt.title("From " + str(first_date) +" to "+str(last_date))
+plt.suptitle(variable_to_plot + " , "+ data_identifier)
 iris.plot.contourf(empty_data,contours, cmap='GnBu')
 plt.gca().coastlines()
 
+# Set up formatting for the movie files
+Writer = animation.writers['ffmpeg']
+writer = Writer(fps=20, metadata=dict(artist='Me'), bitrate=1000)
 
-animation = FuncAnimation(
+
+movie = FuncAnimation(
     # Your Matplotlib Figure object
     titled_world_map,
     # The function that does the updating of the Figure
     animate,
     # Frame information (here just frame number)
-    np.arange(1, number_of_timepoints, 1),
+    np.arange(1, 100, 1),
     fargs=[],
     # Frame-time in ms; i.e. for a given frame-rate x, 1000/x
-    interval=40
+    interval=50
 )
 
 # Try to set the DPI to the actual number of pixels you're plotting
-animation.save(outputdir+"/movie_"+variable_to_plot+"_"+data_identifier+"_"+ str(first_date) +"_"+str(last_date)+".mp4", dpi=128)
+movie.save(outputdir+"/movie_"+variable_to_plot+"_"+data_identifier+"_"+ str(first_date) +"_"+str(last_date)+".mp4", writer= writer)
