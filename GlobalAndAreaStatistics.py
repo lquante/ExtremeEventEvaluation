@@ -8,11 +8,16 @@ import argparse
 import os
 import re
 
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+
 import iris
 import iris.coord_categorisation
 import iris.plot as iplt
 import iris.quickplot as qplt
-import matplotlib.pyplot as plt
+
 import numpy as np
 from iris.analysis import Aggregator
 from iris.experimental.equalise_cubes import equalise_attributes
@@ -205,14 +210,12 @@ def contour_plot_intensity_data(data, contour_levels, filename=''):
     plt.savefig(filename)
 
 
-
 def contour_plot_compare_intensity_data(data, contour_levels, filename=''):
     # Plot the results.
     qplt.contourf(data, contour_levels, cmap='coolwarm')
     plt.gca().coastlines()
 
     plt.savefig(filename)
-
 
 
 # model identification based on structure of filename: str("output_" + i_model + "_" + timeindex + ".nc") from Pathname Collection Helper
@@ -237,7 +240,7 @@ def safe_data_nc(data, analysisidentifier):
 
 
 # function to concatenate cube for specified variable
-def concatenate_variables (data , variable):
+def concatenate_variables(data, variable):
     # concatenate all input files in one cube (NB: assumes data unique wrt to time)
 
     # import all single data files into one cubelist
@@ -250,13 +253,14 @@ def concatenate_variables (data , variable):
 
     # equalise attributes of cubes and unify time units
 
+
     equalise_attributes(filtered_data_cube)
+
     unify_time_units(filtered_data_cube)
 
     # concatenate cubes
 
     return filtered_data_cube.concatenate_cube()
-
 
 
 # argument parser definition
@@ -290,6 +294,19 @@ parser.add_argument(
 )
 
 parser.add_argument(
+    "--latitude_lower_bound"
+    , type=int,
+    help="lower_bound_for_latitudes_to_analyze"
+)
+
+parser.add_argument(
+    "--latitude_upper_bound"
+    , type=int,
+    default=90,
+    help="upper_bound_for_latitudes_to_analyze"
+)
+
+parser.add_argument(
     "--settings"
     , type=str,
     help="argument to submit settingsfile with all arguments included"
@@ -297,21 +314,21 @@ parser.add_argument(
 
 args = parser.parse_args()
 
-yaml = ruamel.yaml.YAML()
-with open(args.settings, 'r') as stream:
-    try:
-        settings = yaml.load(stream)
-    except yaml.YAMLError as exc:
-        print(exc)
+if (args.settings):
 
+    yaml = ruamel.yaml.YAML()
+    with open(args.settings, 'r') as stream:
+        try:
+            settings = yaml.load(stream)
+        except ruamel.yaml.YAMLError as exc:
+            print(exc)
 
-
-
-args.areasettings = settings ["area_settings"]
-args.globalsettings = settings ["global_settings"]
-args.data = settings ["data"]
-args.resolution = settings ["resolution"]
-
+    args.areasettings = settings["area_settings"]
+    args.globalsettings = settings["global_settings"]
+    args.data = settings["data"]
+    args.resolution = settings["resolution"]
+    args.latitude_lower_bound = settings["latitude_lower_bound"]
+    args.latitude_upper_bound = settings["latitude_upper_bound"]
 
 for i_data in args.data:
     # load data file
@@ -319,7 +336,7 @@ for i_data in args.data:
     with open(i_data, 'r') as stream:
         try:
             data = yaml.load(stream)
-        except yaml.YAMLError as exc:
+        except ruamel.yaml.YAMLError as exc:
             print(exc)
 
     # get model properties for plots
@@ -328,7 +345,7 @@ for i_data in args.data:
     end_year = 0
 
     for i_datafile in data:
-        model_properties = model_identification_re(i_datafile)
+        model_properties = model_identification_re(i_data)
         model_name = (model_properties["name"])
         partial_start_year = (model_properties["start"])
         partial_end_year = (model_properties["end"])
@@ -340,9 +357,8 @@ for i_data in args.data:
     string_start_year = str(start_year)
     string_end_year = str(end_year)
 
-    data_identifier = model_name + "_" + string_start_year + "_"+string_end_year
+    data_identifier = model_name + "_" + string_start_year + "_" + string_end_year
     # main part of script
-
 
     # GLOBAL STATISTICS AND MAP-PLOTS
 
@@ -364,11 +380,20 @@ for i_data in args.data:
         if (os.path.exists(outputdir) == False):
             os.mkdir(outputdir)
 
-        concatenated_data = concatenate_variables(data,variable)
+        concatenated_data = concatenate_variables(data, variable)
+
+        # apply latitudinal bounds
+
+        # restrict on target coords depending on resolution setting
+
+        latitude_constraint = iris.Constraint(
+            latitude=lambda v: args.latitude_lower_bound <= v <= args.latitude_upper_bound)
+
+        bounded_data = concatenated_data.extract(latitude_constraint)
 
         # quantile analysis
 
-        quantiles = concatenated_data.collapsed('time', iris.analysis.PERCENTILE, percent=quantiles)
+        quantiles = bounded_data.collapsed('time', iris.analysis.PERCENTILE, percent=quantiles)
 
         iris.save(quantiles, outputdir + '/' + data_identifier + '_quantile_analysis.nc')
 
@@ -376,22 +401,21 @@ for i_data in args.data:
 
         for i_depth in depth_thresholds:
             for i_days in time_thresholds:
+                thresholded_data = calculate_data_above_threshold_in_x_days(bounded_data, i_depth, i_days, False)
 
-                thresholded_data = calculate_data_above_threshold_in_x_days(data,i_depth,i_days,False)
-
-                threshold_identifier = outputdir + '/' + data_identifier + '_threshold_analysis_depth_' + i_depth + '_days_' + i_days
+                threshold_identifier = outputdir + '/' + data_identifier + '_threshold_analysis_depth_' + str(
+                    i_depth) + '_days_' + str(i_days)
 
                 # define contours
 
-                max_thresholded_data = np.max(thresholded_data.data)
-                stepsize = max_thresholded_data / 20
-                contours = np.arange(0,max_thresholded_data,stepsize)
+                max_thresholded_data = max(np.max(thresholded_data.data), 10)
+                stepsize = min(max_thresholded_data / 20, 1)
+                contours = np.arange(0, max_thresholded_data, stepsize)
 
-                contour_plot_intensity_data(thresholded_data,contours,threshold_identifier+".png")
+                contour_plot_intensity_data(thresholded_data, contours, threshold_identifier + ".png")
 
                 iris.save(thresholded_data, threshold_identifier + '.nc')
-
-
+                plt.close()
 
     # AREA STATISTICS AND GRAPHS
 
@@ -419,20 +443,18 @@ for i_data in args.data:
 
         concatenated_data = concatenate_variables(data, variable)
 
-
         # restrict on target coords depending on resolution setting
 
-        if (args.resoluiton == "CMIP_HR"):
+        if (args.resolution == "CMIP_HR"):
             area_constraint = iris.Constraint(
                 latitude=lambda v: area_lat - 90 / 192 <= v <= area_lat + 90 / 192,
                 longitude=lambda v: area_lon - 180 / 384 <= v <= area_lon + 180 / 384)
-
         # restrict on target coords (for low resolution models)
-        if (args.resoluiton == "CMIP_LR"):
+        if (args.resolution == "CMIP_LR"):
             area_constraint = iris.Constraint(
                 latitude=lambda v: area_lat - 90 / 144 <= v <= area_lat + 90 / 144,
                 longitude=lambda v: area_lon - 180 / 192 <= v <= area_lon + 180 / 192)
-        if (args.resoluiton == "halfDegree"):
+        if (args.resolution == "halfDegree"):
             area_constraint_halfDegree = iris.Constraint(
                 latitude=lambda v: area_lat - 90 / 180 <= v <= area_lat + 90 / 180,
                 longitude=lambda v: area_lon - 180 / 360 <= v <= area_lon + 180 / 360)
@@ -445,7 +467,7 @@ for i_data in args.data:
         plt.xlabel("time")
         plt.ylabel("daily snowfall (mm)")
         plt.title(
-            "Lat. " + str(area_lat) + " and lon. " + str(area_lon) + ", " + area_name)
+            area_name)
         plt.suptitle(model_name + " from " + string_start_year + " to " + string_end_year)
         plt.savefig((plotdir + "_timeseries"))
         plt.close()
@@ -458,7 +480,7 @@ for i_data in args.data:
         plt.xlabel("daily snowfall (mm)")
         plt.ylabel("number of days in resp. bin")
         plt.title(
-            "Lat. " + str(area_lat) + " and Lon. " + str(area_lon) + ", " + area_name)
+            area_name)
         plt.suptitle(model_name + " from " + string_start_year + " to " + string_end_year)
         plt.hist(target_area_data.data, bins, range=(10, np_data.max()))
         plt.savefig((plotdir + "_histogramm"))
@@ -470,7 +492,7 @@ for i_data in args.data:
         plt.xlabel("daily snowfall (mm)")
         plt.ylabel("share of days in resp. bin")
         plt.title(
-            "Lat. " + str(area_lat) + " and Lon. " + str(area_lon) + ", " + area_name)
+            area_name)
         plt.suptitle(model_name + "  from " + string_start_year + " to " + string_end_year)
 
         plt.hist(target_area_data.data, bins, range=(10, np_data.max()), density=True)
@@ -498,7 +520,7 @@ for i_data in args.data:
         plt.xlabel("time")
         plt.ylabel("mean annual snowfall (mm)")
         plt.title(
-            "Lat. " + str(area_lat) + " and lon. " + str(area_lon) + ", " + area_name)
+            area_name)
         plt.suptitle(model_name + " from " + string_start_year + " to " + string_end_year)
         plt.savefig((plotdir + "_timeseries_annual_max"))
         plt.close()
@@ -507,7 +529,7 @@ for i_data in args.data:
         plt.xlabel("time")
         plt.ylabel("mean seasonal snowfall (mm)")
         plt.title(
-            "Lat. " + str(area_lat) + " and lon. " + str(area_lon) + ", " + area_name)
+            area_name)
         plt.suptitle(model_name + " from " + string_start_year + " to " + string_end_year)
         plt.savefig((plotdir + "_timeseries_seasonal_max"))
         plt.close()

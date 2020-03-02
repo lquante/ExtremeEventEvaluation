@@ -5,17 +5,14 @@ import os
 from datetime import datetime
 
 import iris
-import numpy as np
-
 import iris.plot as iplt
-import iris.quickplot as qplt
-import matplotlib.pyplot as plt
 import matplotlib.animation as animation
+import matplotlib.pyplot as plt
+import numpy as np
 from iris.analysis import Aggregator
 from iris.experimental.equalise_cubes import equalise_attributes
-from ruamel.yaml import ruamel
-
 from matplotlib.animation import FuncAnimation
+from ruamel.yaml import ruamel
 
 
 def load_data_from_netcdf(filepath):
@@ -123,7 +120,7 @@ movie = FuncAnimation(
     # The function that does the updating of the Figure
     animate,
     # Frame information (here just frame number)
-    np.arange(1, 100, 1),
+    np.arange(1, number_of_timepoints, 1),
     fargs=[],
     # Frame-time in ms; i.e. for a given frame-rate x, 1000/x
     interval=50
