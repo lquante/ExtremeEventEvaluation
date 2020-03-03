@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-# script to prepare comparison data from output of snow_processing:
+# script to analyse  quantiles of netcdf geodata
 
 # imports
 
@@ -9,16 +9,9 @@ import os
 import re
 
 import iris
-import iris.plot as iplt
-import iris.quickplot as qplt
-import matplotlib.pyplot as plt
-import numpy as np
 from iris.analysis import Aggregator
 from iris.experimental.equalise_cubes import equalise_attributes
-from iris.util import rolling_window
 from ruamel.yaml import ruamel
-
-
 
 
 def load_data_from_netcdf(filepath):
@@ -32,26 +25,6 @@ def get_cube_from_cubelist(data, variablename):
     filtered_cubelist = data.extract(variablename)
     return filtered_cubelist[0]
 
-
-
-# def plot function
-
-def contour_plot_intensity_data(data, contour_levels, filename=''):
-    # Plot the results.
-    qplt.contourf(data, contour_levels, cmap='GnBu')
-    plt.gca().coastlines()
-
-    plt.savefig(filename)
-    iplt.show()
-
-
-def contour_plot_compare_intensity_data(data, contour_levels, filename=''):
-    # Plot the results.
-    qplt.contourf(data, contour_levels, cmap='coolwarm')
-    plt.gca().coastlines()
-
-    plt.savefig(filename)
-    iplt.show()
 
 # argument parser definition
 parser = argparse.ArgumentParser(description="Calculate some analysis metrics on specified files")
@@ -109,8 +82,6 @@ def safe_data_nc(data, analysisidentifier):
 # main part of script
 # concatenate all input files in one cube (NB: assumes data unique wrt to time) TODO: generalize recognition of identical model
 
-
-
 # import all single data files into one cubelist
 
 complete_data_cube = iris.load(data)
@@ -127,11 +98,9 @@ equalise_attributes(filtered_data_cube)
 
 concatenated = filtered_data_cube.concatenate_cube()
 
-print(concatenated)
 
 quantiles = concatenated.collapsed('time', iris.analysis.PERCENTILE, percent=quantiles)
 
-print(quantiles)
 
 settings_identifier = model_identification_re(args.settings)
 

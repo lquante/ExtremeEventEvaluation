@@ -81,7 +81,7 @@ def contour_plot_geodata(data, contour_levels):
 # extract time dimension
 time = variable_data.coord('time')
 number_of_timepoints = time.points.size
-# define timeshift from 1-1-1 to 1850-1-1 => 365* = 674885
+# define timeshift from 1-1-1 to 1850-1-1
 start_date = datetime.strptime('18500101T0000Z', '%Y%m%dT%H%MZ')
 start_shift = start_date.toordinal()
 

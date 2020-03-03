@@ -16,7 +16,6 @@ import matplotlib.pyplot as plt
 import iris
 import iris.coord_categorisation
 import iris.plot as iplt
-import iris.quickplot as qplt
 
 import numpy as np
 from iris.analysis import Aggregator
@@ -200,24 +199,6 @@ def get_cube_from_cubelist(data, variablename):
     return filtered_cubelist[0]
 
 
-# def plot function
-
-def contour_plot_intensity_data(data, contour_levels, filename=''):
-    # Plot the results.
-    qplt.contourf(data, contour_levels, cmap='GnBu')
-    plt.gca().coastlines()
-
-    plt.savefig(filename)
-
-
-def contour_plot_compare_intensity_data(data, contour_levels, filename=''):
-    # Plot the results.
-    qplt.contourf(data, contour_levels, cmap='coolwarm')
-    plt.gca().coastlines()
-
-    plt.savefig(filename)
-
-
 # model identification based on structure of filename: str("output_" + i_model + "_" + timeindex + ".nc") from Pathname Collection Helper
 def model_identification_re(filepath):
     model = re.search('(.*/)(output_)(.*)(_)(\d{4})(\d{4})(.nc)$', filepath)
@@ -252,7 +233,6 @@ def concatenate_variables(data, variable):
     filtered_data_cube = complete_data_cube.extract(variable)
 
     # equalise attributes of cubes and unify time units
-
 
     equalise_attributes(filtered_data_cube)
 
@@ -345,7 +325,7 @@ for i_data in args.data:
     end_year = 0
 
     for i_datafile in data:
-        model_properties = model_identification_re(i_data)
+        model_properties = model_identification_re(i_datafile)
         model_name = (model_properties["name"])
         partial_start_year = (model_properties["start"])
         partial_end_year = (model_properties["end"])
@@ -360,7 +340,7 @@ for i_data in args.data:
     data_identifier = model_name + "_" + string_start_year + "_" + string_end_year
     # main part of script
 
-    # GLOBAL STATISTICS AND MAP-PLOTS
+    # GLOBAL STATISTICS
 
     for i_settings in args.globalsettings:
         # load settings file
@@ -402,20 +382,9 @@ for i_data in args.data:
         for i_depth in depth_thresholds:
             for i_days in time_thresholds:
                 thresholded_data = calculate_data_above_threshold_in_x_days(bounded_data, i_depth, i_days, False)
-
                 threshold_identifier = outputdir + '/' + data_identifier + '_threshold_analysis_depth_' + str(
                     i_depth) + '_days_' + str(i_days)
-
-                # define contours
-
-                max_thresholded_data = max(np.max(thresholded_data.data), 10)
-                stepsize = min(max_thresholded_data / 20, 1)
-                contours = np.arange(0, max_thresholded_data, stepsize)
-
-                contour_plot_intensity_data(thresholded_data, contours, threshold_identifier + ".png")
-
                 iris.save(thresholded_data, threshold_identifier + '.nc')
-                plt.close()
 
     # AREA STATISTICS AND GRAPHS
 
@@ -443,7 +412,7 @@ for i_data in args.data:
 
         concatenated_data = concatenate_variables(data, variable)
 
-        # restrict on target coords depending on resolution setting
+
 
         if (args.resolution == "CMIP_HR"):
             area_constraint = iris.Constraint(
@@ -454,10 +423,10 @@ for i_data in args.data:
             area_constraint = iris.Constraint(
                 latitude=lambda v: area_lat - 90 / 144 <= v <= area_lat + 90 / 144,
                 longitude=lambda v: area_lon - 180 / 192 <= v <= area_lon + 180 / 192)
-        if (args.resolution == "halfDegree"):
-            area_constraint_halfDegree = iris.Constraint(
-                latitude=lambda v: area_lat - 90 / 180 <= v <= area_lat + 90 / 180,
-                longitude=lambda v: area_lon - 180 / 360 <= v <= area_lon + 180 / 360)
+        else:
+            area_constraint = iris.Constraint(
+                latitude=lambda v: area_lat - 90 / 360 <= v <= area_lat + 90 / 360,
+                longitude=lambda v: area_lon - 180 / 720 <= v <= area_lon + 180 / 720)
 
         target_area_data = concatenated_data.extract(area_constraint)
 
@@ -508,31 +477,23 @@ for i_data in args.data:
         iris.coord_categorisation.add_season_year(target_area_data, 'time', name='season_year')
         iris.coord_categorisation.add_year(target_area_data, 'time', name='year')
 
-        annual_seasonal_mean = target_area_data.aggregated_by(
+        annual_seasonal_max = target_area_data.aggregated_by(
             ['clim_season', 'season_year'], iris.analysis.MAX)
 
-        annual__mean = target_area_data.aggregated_by(
+        annual_max = target_area_data.aggregated_by(
             ['year'], iris.analysis.MAX)
 
         # plot the yearly / seasonal maximum time series
 
-        iris.plot.plot(annual__mean)
+        iris.plot.plot(annual_max)
         plt.xlabel("time")
-        plt.ylabel("mean annual snowfall (mm)")
+        plt.ylabel("max annual snowfall (mm)")
         plt.title(
             area_name)
         plt.suptitle(model_name + " from " + string_start_year + " to " + string_end_year)
         plt.savefig((plotdir + "_timeseries_annual_max"))
         plt.close()
 
-        iris.plot.plot(annual_seasonal_mean)
-        plt.xlabel("time")
-        plt.ylabel("mean seasonal snowfall (mm)")
-        plt.title(
-            area_name)
-        plt.suptitle(model_name + " from " + string_start_year + " to " + string_end_year)
-        plt.savefig((plotdir + "_timeseries_seasonal_max"))
-        plt.close()
 
         iris.save(target_area_data,
                   outputdir + '/' + model_name + "_" + area_name + "_" + string_start_year + "_" + string_end_year + '_area_analysis.nc')
