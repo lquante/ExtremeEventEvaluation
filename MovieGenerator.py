@@ -6,6 +6,7 @@ from datetime import datetime
 
 import iris
 import iris.plot as iplt
+import iris.quickplot as qplt
 import matplotlib.animation as animation
 import matplotlib.pyplot as plt
 import numpy as np
@@ -105,13 +106,13 @@ titled_world_map = plt.figure()
 first_date = datetime.fromordinal(int(time.points[0]) + start_shift)
 last_date = datetime.fromordinal(int(time.points[number_of_timepoints-1]) + start_shift)
 plt.title("From " + str(first_date) +" to "+str(last_date))
-plt.suptitle(variable_to_plot + " , "+ data_identifier)
-iris.plot.contourf(empty_data,contours, cmap='GnBu')
+plt.suptitle(variable_to_plot + " , " + data_identifier)
+qplt.contourf(empty_data, contours, cmap='GnBu')
 plt.gca().coastlines()
 
 # Set up formatting for the movie files
 Writer = animation.writers['ffmpeg']
-writer = Writer(fps=20, metadata=dict(artist='Me'), bitrate=1000)
+writer = Writer(fps=20, bitrate=5000)
 
 
 movie = FuncAnimation(
@@ -120,7 +121,7 @@ movie = FuncAnimation(
     # The function that does the updating of the Figure
     animate,
     # Frame information (here just frame number)
-    np.arange(1, number_of_timepoints, 1),
+    np.arange(1, 10, 1),
     fargs=[],
     # Frame-time in ms; i.e. for a given frame-rate x, 1000/x
     interval=50
