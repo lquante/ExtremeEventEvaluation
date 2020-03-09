@@ -11,6 +11,7 @@ import re
 import iris
 from iris.analysis import Aggregator
 from iris.experimental.equalise_cubes import equalise_attributes
+from iris.util import unify_time_units
 from ruamel.yaml import ruamel
 
 
@@ -42,32 +43,11 @@ if not args.settings:
     args.settings = os.path.join(os.getcwd(), 'settings.yml')
 
 
-# load settings file
-yaml = ruamel.yaml.YAML()
-with open(args.settings, 'r') as stream:
-    try:
-        settings = yaml.load(stream)
-    except yaml.YAMLError as exc:
-        print(exc)
-data_input = settings["data"]
-quantiles = settings ["quantiles"]
-outputdir = settings ["output"]
-
-
-# load data file
-yaml = ruamel.yaml.YAML()
-with open(data_input, 'r') as stream:
-    try:
-        data = yaml.load(stream)
-    except yaml.YAMLError as exc:
-        print(exc)
-
-
 # some analysis help methods
 
 # model identification based on structure of outpufilename: str("output_" + i_model + "_" + timeindex + ".nc") from Pathname Collection Helper
 def model_identification_re(filepath):
-    model = re.search('(.*/)(settings_)(.*)(.nc)$', filepath)
+    model = re.search('(.*/)(settings_)(.*)(.yml)$', filepath)
     if (model):
         model_string = model.group(3)
     else:
@@ -79,29 +59,57 @@ def model_identification_re(filepath):
 def safe_data_nc(data, analysisidentifier):
     iris.save(data, outputdir + '/data_analysis_' + analysisidentifier + '.nc')
 
-# main part of script
-# concatenate all input files in one cube (NB: assumes data unique wrt to time) TODO: generalize recognition of identical model
 
-# import all single data files into one cubelist
+# load settings file
+yaml = ruamel.yaml.YAML()
+with open(args.settings, 'r') as stream:
+    try:
+        settings = yaml.load(stream)
+    except yaml.YAMLError as exc:
+        print(exc)
+datalist = settings["data"]
+modellist = settings["model"]
+quantiles = settings["quantiles"]
+outputdir = settings["output"]
+latitude_lower_bound = settings["latitude_lower_bound"]
+latitude_upper_bound = settings["latitude_upper_bound"]
+# load data files
 
-complete_data_cube = iris.load(data)
+for i_data in datalist:
+    yaml = ruamel.yaml.YAML()
+    with open(i_data, 'r') as stream:
+        try:
+            data = yaml.load(stream)
+        except yaml.YAMLError as exc:
+            print(exc)
 
-# filter for daily snowfall
+    # main part of script
+    # concatenate all input files in one cube (NB: assumes data unique wrt to time) TODO: generalize recognition of identical model
 
-filtered_data_cube = complete_data_cube.extract('approx_fresh_daily_snow_height')
+    # import all single data files into one cubelist
 
-# equalize attributes to enable concatenating into a single cube
+    complete_data_cube = iris.load(data)
 
-equalise_attributes(filtered_data_cube)
+    # filter for daily snowfall
 
-# concatenate cubes
+    filtered_data_cube = complete_data_cube.extract('approx_fresh_daily_snow_height')
 
-concatenated = filtered_data_cube.concatenate_cube()
+    # equalize attributes to enable concatenating into a single cube
 
+    equalise_attributes(filtered_data_cube)
+    unify_time_units(filtered_data_cube)
 
-quantiles = concatenated.collapsed('time', iris.analysis.PERCENTILE, percent=quantiles)
+    # concatenate cubes
 
+    concatenated = filtered_data_cube.concatenate_cube()
 
-settings_identifier = model_identification_re(args.settings)
+    # constraint on latitude bounds
 
-iris.save(quantiles, outputdir + '/' + settings_identifier+'_quantile_analysis.nc')
+    latitude_constraint = iris.Constraint(
+        latitude=lambda v: latitude_lower_bound <= v <= latitude_upper_bound)
+
+    bounded = concatenated.extract(latitude_constraint)
+
+    quantiles = bounded.collapsed('time', iris.analysis.PERCENTILE, percent=quantiles)
+
+    iris.save(quantiles, outputdir + '/' + '_quantile_analysis.nc')

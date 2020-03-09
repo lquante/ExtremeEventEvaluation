@@ -2,6 +2,7 @@
 
 import argparse
 import os
+import time
 from datetime import datetime
 
 import iris
@@ -14,6 +15,7 @@ from iris.analysis import Aggregator
 from iris.experimental.equalise_cubes import equalise_attributes
 from matplotlib.animation import FuncAnimation
 from ruamel.yaml import ruamel
+from tqdm import tqdm_gui
 
 
 def load_data_from_netcdf(filepath):
@@ -69,15 +71,25 @@ if(len(filtered_data)>1):
 # concatenate cubes
     variable_data = filtered_data.concatenate_cube()
 else:
-    variable_data = filtered_data [0]
-
+    variable_data = filtered_data[0]
 
 contours = np.arange(0, 1000, 10)
 
-# def plot function
+
 def contour_plot_geodata(data, contour_levels):
     # Plot the results.
     iris.plot.contourf(data, contour_levels, cmap='GnBu')
+
+
+def pcolor_geodata(data):
+    # Plot the results.
+    iris.plot.pcolor(data)
+
+
+def points_geodata(data):
+    # Plot the results.
+    iris.plot.points(data)
+
 
 # extract time dimension
 time = variable_data.coord('time')
@@ -85,35 +97,27 @@ number_of_timepoints = time.points.size
 # define timeshift from 1-1-1 to 1850-1-1
 start_date = datetime.strptime('18500101T0000Z', '%Y%m%dT%H%MZ')
 start_shift = start_date.toordinal()
+# guess bounds for lat and lon
+variable_data.coord('latitude').guess_bounds()
+variable_data.coord('longitude').guess_bounds()
 
-def plot_for_time_index(i_time):
-    date_lower_bound = datetime.fromordinal(int(i_time) + start_shift)
-    date_upper_bound = datetime.fromordinal(int(i_time + 1) + start_shift)
-    datepoint = iris.Constraint(time=lambda cell: date_lower_bound <= cell.point <= date_upper_bound)
-    contour_plot_geodata(variable_data.extract(datepoint), contours)
 
 def animate(frame):
-    plot_for_time_index(time.points[frame])
-
-def zero_function(data,axis):
-    return 0
-EMPTY_AGGREGATOR = Aggregator("zero function",zero_function)
+    points_geodata(variable_data[frame])
+    print(str(frame))
+    # initialize plot with world map data
 
 
-# initialize plot with world map data
-empty_data = variable_data.collapsed('time', iris.analysis.SUM)
+start_data = variable_data[0]
 titled_world_map = plt.figure()
 first_date = datetime.fromordinal(int(time.points[0]) + start_shift)
-last_date = datetime.fromordinal(int(time.points[number_of_timepoints-1]) + start_shift)
-plt.title("From " + str(first_date) +" to "+str(last_date))
+last_date = datetime.fromordinal(int(time.points[number_of_timepoints - 1]) + start_shift)
+plt.title("From " + str(first_date) + " to " + str(last_date))
 plt.suptitle(variable_to_plot + " , " + data_identifier)
-qplt.contourf(empty_data, contours, cmap='GnBu')
+qplt.points(start_data)
 plt.gca().coastlines()
-
 # Set up formatting for the movie files
-Writer = animation.writers['ffmpeg']
-writer = Writer(fps=20, bitrate=5000)
-
+writer = animation.FFMpegWriter(fps=25)
 
 movie = FuncAnimation(
     # Your Matplotlib Figure object
@@ -121,11 +125,7 @@ movie = FuncAnimation(
     # The function that does the updating of the Figure
     animate,
     # Frame information (here just frame number)
-    np.arange(1, 10, 1),
-    fargs=[],
-    # Frame-time in ms; i.e. for a given frame-rate x, 1000/x
-    interval=50
+    number_of_timepoints - 1
 )
-
-# Try to set the DPI to the actual number of pixels you're plotting
-movie.save(outputdir+"/movie_"+variable_to_plot+"_"+data_identifier+"_"+ str(first_date) +"_"+str(last_date)+".mp4", writer= writer)
+movie.save(outputdir + "/movie_" + variable_to_plot + "_" + data_identifier + "_" + str(first_date) + "_" + str(
+    last_date) + "test_100.mp4", writer=writer)

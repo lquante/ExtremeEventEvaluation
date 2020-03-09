@@ -109,5 +109,5 @@ for i_data in data:
 os.chdir(args.settingsdir)
 yaml = ruamel.yaml.YAML()
 yaml.default_flow_style = None
-with open("list_of_settings.yml", "w") as output:
+with open("quantile_settings_list_MPI.yml", "w") as output:
     yaml.dump(settingspathcollection, output)

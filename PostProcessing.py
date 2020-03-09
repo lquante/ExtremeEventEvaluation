@@ -5,8 +5,10 @@
 # imports
 
 import argparse
+import os
 import re
 from datetime import datetime, timedelta
+from pathlib import Path
 
 import matplotlib
 
@@ -60,10 +62,15 @@ def contour_min_max(data):
 parser = argparse.ArgumentParser(description="Plot provided netcdf datafiles")
 
 parser.add_argument(
-    "--data",
-    nargs="+"
+    "--datadir"
     , type=str,
-    help="YML list of datafile(s)"
+    help="directory to scrape for any *.nc data"
+)
+
+parser.add_argument(
+    "--outputdir"
+    , type=str,
+    help="directory to save graphs"
 )
 
 parser.add_argument(
@@ -96,70 +103,63 @@ parser.add_argument(
 
 args = parser.parse_args()
 
-# load list of datafiles for each suplied data list
-for i_datalist in args.data:
-    yaml = ruamel.yaml.YAML()
-    with open(i_datalist, 'r') as stream:
-        try:
-            data = yaml.load(stream)
-        except ruamel.yaml.YAMLError as exc:
-            print(exc)
+# scrape date directory for nc files
 
-    for i_datafile in data:
-        # get model properties for plots
-        model_properties = model_identification_re(i_datafile)
-        model_name = (model_properties["name"])
-        start_year = (model_properties["start"])
-        end_year = (model_properties["end"])
 
-        datacube = iris.load_cube(i_datafile)
+for i_datafile in Path(args.datadir).rglob("*.nc"):
+    # get model properties for plots
+    i_datafile = str(i_datafile)
+    model_properties = model_identification_re(str(i_datafile))
+    model_name = (model_properties["name"])
+    start_year = (model_properties["start"])
+    end_year = (model_properties["end"])
 
-        # get all variable names:
-        var_name = datacube.var_name
-        # ge coord names
-        coord_names = [coord.name() for coord in datacube.coords()]
-        # loop over all coordinates which are not lat lon or time
-        coord_names.remove('latitude')
-        coord_names.remove('longitude')
-        coord_names.remove('time')
-        # define timeshift from 1-1-1 to 1850-1-1
-        start_date = datetime.strptime('18500101T0000Z', '%Y%m%dT%H%MZ')
-        start_shift = start_date.toordinal()
-        # loop over timepoints
-        for i_time in datacube.coord('time').points:
-            i_date = (datetime.fromordinal((int(i_time + start_shift))))
+    datacube = iris.load_cube(i_datafile)
+    os.chdir(args.outputdir)
+    # get all variable names:
+    var_name = datacube.var_name
+    # ge coord names
+    coord_names = [coord.name() for coord in datacube.coords()]
+    # loop over all coordinates which are not lat lon or time
+    coord_names.remove('latitude')
+    coord_names.remove('longitude')
+    coord_names.remove('time')
+    # define timeshift from 1-1-1 to 1850-1-1
+    start_date = datetime.strptime('18500101T0000Z', '%Y%m%dT%H%MZ')
+    start_shift = start_date.toordinal()
+    # loop over timepoints
+    for i_time in datacube.coord('time').points:
+        i_date = (datetime.fromordinal((int(i_time + start_shift))))
 
-            timefiltered_data = datacube.extract(iris.Constraint(
-                time=lambda timeinterval: i_date - timedelta(hours=12) <= (timeinterval.point) <= i_date + timedelta(
-                    hours=12)))  # TODO: fix workaround, works as long only daily data is used
-            i_date = i_date.date()  # ignore clocktimes
-            for i_coord in coord_names:
-                for i_point in datacube.coord(i_coord).points:
-                    to_plot = timefiltered_data.extract(iris.Constraint(**{i_coord: i_point}))
-                    contours = contour_min_max(to_plot)
-                    filename = (model_name + "_" + str(start_year) + "_" + str(end_year) + "_" + str(i_coord) + str(
-                        i_date) + "_" + str(i_point) + ".png")
-                    # Plot the results.
-                    qplt.contourf(to_plot, contours, cmap='GnBu')
-                    plt.title(i_coord + "=" + str(i_point) + " at " + str(i_date))
-                    plt.suptitle(var_name + " " + model_name + " from " + str(start_year) + " to " + str(end_year))
-                    plt.gca().coastlines()
-                    fig = matplotlib.pyplot.gcf()
-                    fig.set_size_inches(6, 4)
-                    plt.savefig(filename)
-                    plt.close()
-            # special case of scalar time value, that should be plotted:
-            if len(coord_names) == 0:
-                to_plot = timefiltered_data
-                contours = contour_min_max(to_plot)
-                filename = (model_name + "_" + str(start_year) + "_" + str(end_year) + "_" + str(var_name) + str(
-                    i_date) + ".png")
+        timefiltered_data = datacube.extract(iris.Constraint(
+            time=lambda timeinterval: i_date - timedelta(hours=12) <= (timeinterval.point) <= i_date + timedelta(
+                hours=12)))  # TODO: fix workaround, works as long only daily data is used
+        i_date = i_date.date()  # ignore clocktimes
+        for i_coord in coord_names:
+            for i_point in datacube.coord(i_coord).points:
+                to_plot = timefiltered_data.extract(iris.Constraint(**{i_coord: i_point}))
+                filename = (model_name + "_" + str(start_year) + "_" + str(end_year) + "_" + str(i_coord) + str(
+                    i_date) + "_" + str(i_point) + ".png")
                 # Plot the results.
-                qplt.contourf(to_plot, contours, cmap='GnBu')
-                plt.title(var_name + " at " + str(i_date))
-                plt.suptitle(model_name + " from " + str(start_year) + " to " + str(end_year))
+                qplt.pcolor(to_plot)
+                plt.title(i_coord + "=" + str(i_point) + " at " + str(i_date))
+                plt.suptitle(var_name + " " + model_name + " from " + str(start_year) + " to " + str(end_year))
                 plt.gca().coastlines()
                 fig = matplotlib.pyplot.gcf()
                 fig.set_size_inches(6, 4)
                 plt.savefig(filename)
                 plt.close()
+        # special case of scalar time value, that should be plotted:
+        # if len(coord_names) == 0:
+        #     to_plot = timefiltered_data
+        #     filename = (model_name + "_" + str(start_year) + "_" + str(end_year) + "_" + str(var_name) + str(
+        #         i_date) + ".png")
+        #     # Plot the results.
+        #     qplt.pcolor(to_plot)
+        #     plt.title(var_name + " at " + str(i_date))
+        #     plt.suptitle(model_name + " from " + str(start_year) + " to " + str(end_year))
+        #     plt.gca().coastlines()
+        #     fig = matplotlib.pyplot.gcf()
+        #     fig.set_size_inches(6, 4)
+        #     plt.savefig(filename)
+        #     plt.close()

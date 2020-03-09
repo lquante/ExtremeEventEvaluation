@@ -111,37 +111,46 @@ def count_accumulated_exceedance(data, threshold, axis, accumulation_length):
     # Find the windows exceeding the accumulation threshold (along the added 'window axis').
     exceeding_windows = np.sum(accumulation_windows, axis=axis + 1) > threshold
     # Count points fulfilling the condition (along the time axis).
-    exceeding_count = np.sum(exceeding_windows, axis=axis, dtype=int)
-    return exceeding_count
+    return np.sum(exceeding_windows, axis=axis, dtype=int)
 
 
-def calculate_data_above_threshold_for_x_days(data, threshold, numberOfDays, relativeValue):
-    # Make an aggregator from the user function.
-    SPELL_COUNT = Aggregator('spell_count',
-                             count_spells,
-                             units_func=lambda units: 1)
+def flag_average_exceedance(data, threshold, axis, accumulation_length):
+    """
+    Function to mark the number of points in a sequence where the average
+    has exceeded a threshold for a certain number of timepoints (accumulation_length).
 
-    # Calculate the statistic
-    data_above_threshold = data.collapsed('time', SPELL_COUNT,
-                                          threshold=threshold,
-                                          spell_length=numberOfDays)
-    # TODO: customize label
-    data_above_threshold.rename(
-        ' Percentage of days with consecutive ' + str(numberOfDays) + '-day snow falls above ' + str(
-            threshold) + 'mm in timeperiod')
+    Generalised to operate on multiple time sequences arranged on a specific
+    axis of a multidimensional array.
 
-    # relative result
-    if (relativeValue == True):
-        total_days = data.coords("time")[0].shape[0]
-        data_above_threshold.data = data_above_threshold.data / numberOfDays * 100
-        data_above_threshold.rename(
-            ' Percentage of days with consecutive ' + str(numberOfDays) + '-day snow falls above ' + str(
-                threshold) + 'mm in timeperiod')
-    else:
-        data_above_threshold.rename(' Number of days with ' + str(numberOfDays) + '-day snow falls above ' + str(
-            threshold) + 'mm for each day in timeperiod')
+    Args:
 
-    return data_above_threshold
+    * data (array):
+        raw data to be compared with value threshold.
+
+    * threshold (float):
+        threshold point for accumulation over datapoints.
+
+    * axis (int):
+        number of the array dimension mapping the time sequences.
+        (Can also be negative, e.g. '-1' means last dimension)
+
+    * accumulation_length (int):
+        number of timepoint for which the average shall be calculated.
+
+    """
+    if axis < 0:
+        # just cope with negative axis numbers
+        axis += data.ndim
+
+    # Make an array with data values "windowed" along the time axis.
+    accumulation_windows = rolling_window(data, window=accumulation_length, axis=axis)
+    # Find the windows exceeding the accumulation threshold (along the added 'window axis').
+    exceeding_windows = np.average(accumulation_windows, axis=axis + 1) > threshold
+    return exceeding_windows
+
+
+def count_average_exceedance(data, threshold, axis, accumulation_length):
+    return np.sum(flag_average_exceedance(data, threshold, axis, accumulation_length), axis=axis, dtype=int)
 
 
 def calculate_data_above_threshold_in_x_days(data, threshold, numberOfDays, relativeValue):
@@ -169,22 +178,47 @@ def calculate_data_above_threshold_in_x_days(data, threshold, numberOfDays, rela
     return data_above_threshold
 
 
-def data_analysis_accumulated_threshold(filepath, depth_threshold, time_threshold):
-    # retrieve data
-    data = load_data_from_netcdf(filepath)
-    cube_daily = get_cube_from_cubelist(data, 'approx_fresh_daily_snow_height')
-    analysed_data = calculate_data_above_threshold_in_x_days(cube_daily, depth_threshold, time_threshold, False)
+def calculate_average_above_threshold_in_x_days(data, threshold, numberOfDays, relativeValue):
+    # Make an aggregator from the user function.
+    AVERAGE_COUNT = Aggregator('average_exceedance_count',
+                               count_accumulated_exceedance,
+                               units_func=lambda units: 1)
 
-    return analysed_data  # returns analysed data
+    # Calculate the statistic
+    average_above_threshold = data.collapsed('time', AVERAGE_COUNT,
+                                             threshold=threshold,
+                                             accumulation_length=numberOfDays)
+
+    # relative result
+    if (relativeValue == True):
+        average_above_threshold.rename(
+            ' Percentage of days with average snow  falls in ' + str(numberOfDays) + ' days above ' + str(
+                threshold) + 'mm')
+        average_above_threshold.data = average_above_threshold.data / numberOfDays * 100
+    else:
+        average_above_threshold.rename(
+            ' Number of days with average snow falls in ' + str(numberOfDays) + ' days above ' + str(
+                threshold) + 'mm')
+    return average_above_threshold
 
 
-def data_analysis_each_day_threshold(filepath, depth_threshold, time_threshold):
-    # retrieve data
-    data = load_data_from_netcdf(filepath)
-    cube_daily = get_cube_from_cubelist(data, 'approx_fresh_daily_snow_height')
-    analysed_data = calculate_data_above_threshold_for_x_days(cube_daily, depth_threshold, time_threshold, False)
+# experimental tools to calculate custom stats
 
-    return analysed_data  # returns analysed data
+
+def average_stats(data, numberOfDays, original_varname):
+    extended_varname = original_varname + "_average" + str(numberOfDays)
+    data.var_name = extended_varname
+    average_cube = data.rolling_window('time', iris.analysis.MEAN, numberOfDays)
+    return average_cube
+
+
+def max_stats(data, numberOfDays, original_varname):
+    extended_varname = original_varname + "_maximum" + str(numberOfDays)
+    data.var_name = extended_varname
+    max_cube = data.rolling_window('time', iris.analysis.MAX, numberOfDays)
+    return max_cube
+
+
 
 
 def load_data_from_netcdf(filepath):
@@ -319,37 +353,18 @@ for i_data in args.data:
         except ruamel.yaml.YAMLError as exc:
             print(exc)
 
-    # get model properties for plots
-    # TODO: resolve workaround for year recognition
-    start_year = 50000
-    end_year = 0
+        # main part of script
 
-    for i_datafile in data:
-        model_properties = model_identification_re(i_datafile)
-        model_name = (model_properties["name"])
-        partial_start_year = (model_properties["start"])
-        partial_end_year = (model_properties["end"])
-        if (partial_start_year < start_year):
-            start_year = partial_start_year
-        if (partial_end_year > end_year):
-            end_year = partial_end_year
+        # GLOBAL STATISTICS
 
-    string_start_year = str(start_year)
-    string_end_year = str(end_year)
-
-    data_identifier = model_name + "_" + string_start_year + "_" + string_end_year
-    # main part of script
-
-    # GLOBAL STATISTICS
-
-    for i_settings in args.globalsettings:
-        # load settings file
-        yaml = ruamel.yaml.YAML()
-        with open(i_settings, 'r') as stream:
-            try:
-                settings = yaml.load(stream)
-            except yaml.YAMLError as exc:
-                print(exc)
+        for i_settings in args.globalsettings:
+            # load settings file
+            yaml = ruamel.yaml.YAML()
+            with open(i_settings, 'r') as stream:
+                try:
+                    settings = yaml.load(stream)
+                except yaml.YAMLError as exc:
+                    print(exc)
 
         variable = settings["variable"]
         depth_thresholds = settings["depth_thresholds"]
@@ -360,31 +375,39 @@ for i_data in args.data:
         if (os.path.exists(outputdir) == False):
             os.mkdir(outputdir)
 
-        concatenated_data = concatenate_variables(data, variable)
+            # get model properties for plots
 
-        # apply latitudinal bounds
+        for i_datafile in data:
+            model_properties = model_identification_re(i_datafile)
+            model_name = (model_properties["name"])
+            start_year = (model_properties["start"])
+            end_year = (model_properties["end"])
 
-        # restrict on target coords depending on resolution setting
+            string_start_year = str(start_year)
+            string_end_year = str(end_year)
 
-        latitude_constraint = iris.Constraint(
-            latitude=lambda v: args.latitude_lower_bound <= v <= args.latitude_upper_bound)
+            data_identifier = model_name + "_" + string_start_year + "_" + string_end_year
 
-        bounded_data = concatenated_data.extract(latitude_constraint)
+            # load data of relevant variable
+            variable_data_cube = iris.load_cube(i_datafile, variable)
 
-        # quantile analysis
+            # apply latitudinal bounds
+            latitude_constraint = iris.Constraint(
+                latitude=lambda v: args.latitude_lower_bound <= v <= args.latitude_upper_bound)
 
-        quantiles = bounded_data.collapsed('time', iris.analysis.PERCENTILE, percent=quantiles)
+            bounded_data = variable_data_cube.extract(latitude_constraint)
 
-        iris.save(quantiles, outputdir + '/' + data_identifier + '_quantile_analysis.nc')
+            # average / maximum analysis for rolling window
 
-        # threshhold analysis
-
-        for i_depth in depth_thresholds:
+            original_varname = bounded_data.var_name
             for i_days in time_thresholds:
-                thresholded_data = calculate_data_above_threshold_in_x_days(bounded_data, i_depth, i_days, False)
-                threshold_identifier = outputdir + '/' + data_identifier + '_threshold_analysis_depth_' + str(
-                    i_depth) + '_days_' + str(i_days)
-                iris.save(thresholded_data, threshold_identifier + '.nc')
+                average_data = average_stats(bounded_data, i_days, original_varname)
+                average_identifier = outputdir + '/' + data_identifier + '_average_analysis_days_' + str(i_days)
+                iris.save(average_data, average_identifier + '.nc')
+
+                maximum_data = max_stats(bounded_data, i_days, original_varname)
+                maximum_identifier = outputdir + '/' + data_identifier + '_maximum_analysis_days_' + str(i_days)
+                iris.save(maximum_data, maximum_identifier + '.nc')
 
     # AREA STATISTICS AND GRAPHS
 
@@ -396,6 +419,19 @@ for i_data in args.data:
                 settings = yaml.load(stream)
             except yaml.YAMLError as exc:
                 print(exc)
+        start_year = 5000
+        end_year = 0
+        for i_datafile in data:
+            model_properties = model_identification_re(i_datafile)
+            model_name = (model_properties["name"])
+            partial_start_year = (model_properties["start"])
+            partial_end_year = (model_properties["end"])
+            if (start_year > partial_start_year):
+                start_year = partial_start_year
+            if (end_year < partial_end_year):
+                end_year = partial_end_year
+        string_start_year = str(start_year)
+        string_end_year = str(end_year)
 
         variable = settings["variable"]
         area_lat = settings["area"]["lat"]
@@ -430,70 +466,9 @@ for i_data in args.data:
 
         target_area_data = concatenated_data.extract(area_constraint)
 
-        # plot time series of snow fall
-
-        iris.plot.plot(target_area_data)
-        plt.xlabel("time")
-        plt.ylabel("daily snowfall (mm)")
-        plt.title(
-            area_name)
-        plt.suptitle(model_name + " from " + string_start_year + " to " + string_end_year)
-        plt.savefig((plotdir + "_timeseries"))
-        plt.close()
-        # plot histogram
-        np_data = target_area_data.data
-
-        # TODO: generalize diagram labels
-
-        bins = np.arange(10, np_data.max() + 10, 5)
-        plt.xlabel("daily snowfall (mm)")
-        plt.ylabel("number of days in resp. bin")
-        plt.title(
-            area_name)
-        plt.suptitle(model_name + " from " + string_start_year + " to " + string_end_year)
-        plt.hist(target_area_data.data, bins, range=(10, np_data.max()))
-        plt.savefig((plotdir + "_histogramm"))
-        plt.close()
-        # plot density histogram
-        np_data = target_area_data.data
-
-        bins = np.arange(10, np_data.max() + 10, 5)
-        plt.xlabel("daily snowfall (mm)")
-        plt.ylabel("share of days in resp. bin")
-        plt.title(
-            area_name)
-        plt.suptitle(model_name + "  from " + string_start_year + " to " + string_end_year)
-
-        plt.hist(target_area_data.data, bins, range=(10, np_data.max()), density=True)
-        plt.savefig((plotdir + "_density"))
-        plt.close()
-
-        iris.save(target_area_data,
-                  outputdir + '/' + model_name + "_" + area_name + "_" + string_start_year + "_" + string_end_year + '_area_analysis.nc')
-
-        # calculate yearly, seasonal year and seasonal mean snowfall:
-
         iris.coord_categorisation.add_season(target_area_data, 'time', name='clim_season')
         iris.coord_categorisation.add_season_year(target_area_data, 'time', name='season_year')
         iris.coord_categorisation.add_year(target_area_data, 'time', name='year')
-
-        annual_seasonal_max = target_area_data.aggregated_by(
-            ['clim_season', 'season_year'], iris.analysis.MAX)
-
-        annual_max = target_area_data.aggregated_by(
-            ['year'], iris.analysis.MAX)
-
-        # plot the yearly / seasonal maximum time series
-
-        iris.plot.plot(annual_max)
-        plt.xlabel("time")
-        plt.ylabel("max annual snowfall (mm)")
-        plt.title(
-            area_name)
-        plt.suptitle(model_name + " from " + string_start_year + " to " + string_end_year)
-        plt.savefig((plotdir + "_timeseries_annual_max"))
-        plt.close()
-
 
         iris.save(target_area_data,
                   outputdir + '/' + model_name + "_" + area_name + "_" + string_start_year + "_" + string_end_year + '_area_analysis.nc')
