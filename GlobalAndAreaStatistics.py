@@ -11,11 +11,9 @@ import re
 import matplotlib
 
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt
 
 import iris
 import iris.coord_categorisation
-import iris.plot as iplt
 
 import numpy as np
 from iris.analysis import Aggregator
@@ -388,6 +386,13 @@ for i_data in args.data:
 
             data_identifier = model_name + "_" + string_start_year + "_" + string_end_year
 
+            modeldir = outputdir + "/" + model_name
+            if (os.path.exists(modeldir) == True):
+                os.chdir(modeldir)
+            else:
+                os.mkdir(modeldir)
+                os.chdir(modeldir)
+
             # load data of relevant variable
             variable_data_cube = iris.load_cube(i_datafile, variable)
 
@@ -401,12 +406,25 @@ for i_data in args.data:
 
             original_varname = bounded_data.var_name
             for i_days in time_thresholds:
+
+                averagedir = modeldir + "/average"
+                if (os.path.exists(averagedir) == True):
+                    os.chdir(averagedir)
+                else:
+                    os.mkdir(averagedir)
+                    os.chdir(averagedir)
+
                 average_data = average_stats(bounded_data, i_days, original_varname)
-                average_identifier = outputdir + '/' + data_identifier + '_average_analysis_days_' + str(i_days)
+                average_identifier = averagedir + '/' + data_identifier + '_average_analysis_days_' + str(i_days)
                 iris.save(average_data, average_identifier + '.nc')
 
+                maxdir = modeldir + "/maximum"
+                if (os.path.exists(maxdir) == False):
+                    os.mkdir(maxdir)
+                os.chdir(maxdir)
+
                 maximum_data = max_stats(bounded_data, i_days, original_varname)
-                maximum_identifier = outputdir + '/' + data_identifier + '_maximum_analysis_days_' + str(i_days)
+                maximum_identifier = maxdir + '/' + data_identifier + '_maximum_analysis_days_' + str(i_days)
                 iris.save(maximum_data, maximum_identifier + '.nc')
 
     # AREA STATISTICS AND GRAPHS

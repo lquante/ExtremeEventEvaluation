@@ -7,7 +7,6 @@
 import argparse
 import os
 import re
-from datetime import datetime, timedelta
 from pathlib import Path
 
 import matplotlib
@@ -18,10 +17,8 @@ import matplotlib.pyplot as plt
 import iris
 import iris.analysis
 import iris.coord_categorisation
-import iris.quickplot as qplt
 
 import numpy as np
-from ruamel.yaml import ruamel
 
 
 # import help methods
@@ -75,11 +72,13 @@ args = parser.parse_args()
 
 for i_datafolder in (args.datafolder):
 
+    # glob for all relevant files
+    datafiles = list(Path(i_datafolder).rglob("*.nc"))
     # get overall maximum of data for histogram scaling
     overall_max = 0
     overall_lower_ylim = 0
     overall_upper_ylim = 0
-    for i_data in Path(i_datafolder).rglob("*.nc"):
+    for i_data in datafiles:
         i_data = str(i_data)
         datacube = iris.load_cube(i_data)
         np_data = datacube.data
@@ -90,10 +89,10 @@ for i_datafolder in (args.datafolder):
         overall_lower_ylim = min(overall_lower_ylim, y_lim[0])
         overall_upper_ylim = max(overall_upper_ylim, y_lim[1])
         plt.close()
-    for i_data in Path(i_datafolder).rglob("*.nc"):
+    for i_data in datafiles:
         # get model properties for plots
         i_data = str(i_data)
-        np_data = datacube.data
+
         model_properties = model_identification_re(i_data)
         model_name = (model_properties["name"])
         start_year = str((model_properties["start"]))
@@ -107,6 +106,7 @@ for i_datafolder in (args.datafolder):
 
         plotname = model_name + "_" + area_name + "_" + start_year + "_" + end_year
         datacube = iris.load_cube(i_data)
+        np_data = datacube.data
         os.chdir(i_datafolder)
         # plot density histogram
         bins = np.arange(10, overall_max + 10, 5)

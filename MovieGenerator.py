@@ -1,21 +1,21 @@
 #!/usr/bin/env python
 
 import argparse
+import gc
+import multiprocessing
 import os
-import time
 from datetime import datetime
 
+import cf_units
 import iris
 import iris.plot as iplt
 import iris.quickplot as qplt
 import matplotlib.animation as animation
 import matplotlib.pyplot as plt
 import numpy as np
-from iris.analysis import Aggregator
-from iris.experimental.equalise_cubes import equalise_attributes
+from joblib import Parallel, delayed
 from matplotlib.animation import FuncAnimation
 from ruamel.yaml import ruamel
-from tqdm import tqdm_gui
 
 
 def load_data_from_netcdf(filepath):
@@ -28,6 +28,16 @@ def load_data_from_netcdf(filepath):
 def filter_cubes_from_cubelist(data, variablename):
     filtered_cubelist = data.extract(variablename)
     return filtered_cubelist
+
+
+def animate(frame, variable_data):
+    for artist in plt.gca().lines + plt.gca().collections:
+        artist.remove()
+    frame_data = variable_data[frame]
+    plot = iris.plot.pcolormesh(frame_data)
+    if frame % 10 == 0:
+        gc.collect()
+    return plot
 
 
 # settings file import
@@ -47,6 +57,54 @@ if not args.settings:
     args.settings = os.path.join(os.getcwd(), 'settings.yml')
 
 
+# loads data for each datafile: (needs to contain exactly one variable) TODO: generalize
+
+def movie_from_data(i_data):
+    basic_data = load_data_from_netcdf(i_data)
+    concatenated_data = basic_data[0]
+    variable_to_plot = concatenated_data.var_name
+    variable_data = filter_cubes_from_cubelist(concatenated_data, variable_to_plot)
+
+    # extract time unit & infos
+    time = variable_data.coord('time')
+    time_units = variable_data.coord('time').units
+    number_of_timepoints = time.points.size
+    # define timeshift from 1-1-1 to 1850-1-1
+    fixed_time_unit = cf_units.Unit('days since 1850-1-1 00:00:00', calendar=time_units.calendar)
+    variable_data.coord('time').convert_units(fixed_time_unit)
+    start_date = datetime.strptime('18500101T0000Z', '%Y%m%dT%H%MZ')
+    start_shift = start_date.toordinal()
+    # guess bounds for lat and lon
+    variable_data.coord('latitude').guess_bounds()
+    variable_data.coord('longitude').guess_bounds()
+
+    start_data = variable_data[0]
+    titled_world_map = plt.figure()
+    titled_world_map.set_size_inches(7.5, 3.5)
+    first_date = datetime.fromordinal(int(time.points[0]) + start_shift).date()
+    last_date = datetime.fromordinal(int(time.points[number_of_timepoints - 1]) + start_shift).date()
+    qplt.pcolormesh(start_data)
+    plt.title("From " + str(first_date) + " to " + str(last_date), fontsize=10)
+    plt.suptitle(variable_to_plot + " , " + data_identifier, fontsize=12)
+    plt.gca().coastlines()
+    # Set up formatting for the movie files
+    ffmpeg_writer = animation.FFMpegWriter(fps=30)
+
+    movie = FuncAnimation(
+        # Your Matplotlib Figure object
+        titled_world_map,
+        # The function that does the updating of the Figure
+        animate,
+        fargs=[variable_data],
+        # Frame information (here just frame number)
+        frames=np.arange(1, number_of_timepoints, 1),
+        save_count=None
+
+    )
+    movie.save(outputdir + "/movie_" + variable_to_plot + "_" + data_identifier + "_" + str(first_date) + "_" + str(
+        last_date) + ".mp4", writer=ffmpeg_writer)
+
+
 # load settings file
 yaml = ruamel.yaml.YAML()
 with open(args.settings, 'r') as stream:
@@ -56,76 +114,7 @@ with open(args.settings, 'r') as stream:
         print(exc)
 
 data_input = settings["data"]
-variable_to_plot = settings ["variable"]
-data_identifier = settings ["data_identifier"]
-outputdir = settings ["output"]
-
-# load data from (list of) filepaths
-basic_data = load_data_from_netcdf(data_input)
-
-filtered_data = filter_cubes_from_cubelist(basic_data, variable_to_plot)
-
-if(len(filtered_data)>1):
-# unify attributes of cubes
-    equalise_attributes(filtered_data)
-# concatenate cubes
-    variable_data = filtered_data.concatenate_cube()
-else:
-    variable_data = filtered_data[0]
-
-contours = np.arange(0, 1000, 10)
-
-
-def contour_plot_geodata(data, contour_levels):
-    # Plot the results.
-    iris.plot.contourf(data, contour_levels, cmap='GnBu')
-
-
-def pcolor_geodata(data):
-    # Plot the results.
-    iris.plot.pcolor(data)
-
-
-def points_geodata(data):
-    # Plot the results.
-    iris.plot.points(data)
-
-
-# extract time dimension
-time = variable_data.coord('time')
-number_of_timepoints = time.points.size
-# define timeshift from 1-1-1 to 1850-1-1
-start_date = datetime.strptime('18500101T0000Z', '%Y%m%dT%H%MZ')
-start_shift = start_date.toordinal()
-# guess bounds for lat and lon
-variable_data.coord('latitude').guess_bounds()
-variable_data.coord('longitude').guess_bounds()
-
-
-def animate(frame):
-    points_geodata(variable_data[frame])
-    print(str(frame))
-    # initialize plot with world map data
-
-
-start_data = variable_data[0]
-titled_world_map = plt.figure()
-first_date = datetime.fromordinal(int(time.points[0]) + start_shift)
-last_date = datetime.fromordinal(int(time.points[number_of_timepoints - 1]) + start_shift)
-plt.title("From " + str(first_date) + " to " + str(last_date))
-plt.suptitle(variable_to_plot + " , " + data_identifier)
-qplt.points(start_data)
-plt.gca().coastlines()
-# Set up formatting for the movie files
-writer = animation.FFMpegWriter(fps=25)
-
-movie = FuncAnimation(
-    # Your Matplotlib Figure object
-    titled_world_map,
-    # The function that does the updating of the Figure
-    animate,
-    # Frame information (here just frame number)
-    number_of_timepoints - 1
-)
-movie.save(outputdir + "/movie_" + variable_to_plot + "_" + data_identifier + "_" + str(first_date) + "_" + str(
-    last_date) + "test_100.mp4", writer=writer)
+data_identifier = settings["data_identifier"]
+outputdir = settings["output"]
+num_cores = multiprocessing.cpu_count()
+Parallel(n_jobs=num_cores - 1)(delayed(movie_from_data)(i_data) for i_data in data_input)
