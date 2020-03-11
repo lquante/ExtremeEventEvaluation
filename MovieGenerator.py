@@ -8,6 +8,7 @@ from datetime import datetime
 
 import cf_units
 import iris
+import iris.analysis
 import iris.plot as iplt
 import iris.quickplot as qplt
 import matplotlib.animation as animation
@@ -30,11 +31,15 @@ def filter_cubes_from_cubelist(data, variablename):
     return filtered_cubelist
 
 
-def animate(frame, variable_data):
+def animate(frame, variable_data, start_shift, colormap, datamax):
     for artist in plt.gca().lines + plt.gca().collections:
         artist.remove()
     frame_data = variable_data[frame]
-    plot = iris.plot.pcolormesh(frame_data)
+
+    plot = iris.plot.pcolormesh(frame_data, cmap=colormap, vmin=0, vmax=datamax)
+    ordinal_date = (frame_data.coord('time').points[0])
+    date = datetime.fromordinal(int(ordinal_date + start_shift)).date()
+    plt.title(str(date), fontsize=10)
     if frame % 10 == 0:
         gc.collect()
     return plot
@@ -83,7 +88,10 @@ def movie_from_data(i_data):
     titled_world_map.set_size_inches(7.5, 3.5)
     first_date = datetime.fromordinal(int(time.points[0]) + start_shift).date()
     last_date = datetime.fromordinal(int(time.points[number_of_timepoints - 1]) + start_shift).date()
-    qplt.pcolormesh(start_data)
+    datamax = (variable_data.collapsed(("time", "latitude", "longitude"), iris.analysis.MAX).data)
+    datamax_hundred = datamax if datamax % 100 == 0 else datamax + 100 - datamax % 100
+    colormap = 'plasma'
+    qplt.pcolormesh(start_data, cmap=colormap, vmin=0, vmax=datamax_hundred)
     plt.title("From " + str(first_date) + " to " + str(last_date), fontsize=10)
     plt.suptitle(variable_to_plot + " , " + data_identifier, fontsize=12)
     plt.gca().coastlines()
@@ -95,7 +103,7 @@ def movie_from_data(i_data):
         titled_world_map,
         # The function that does the updating of the Figure
         animate,
-        fargs=[variable_data],
+        fargs=[variable_data, start_shift, colormap, datamax_hundred],
         # Frame information (here just frame number)
         frames=np.arange(1, number_of_timepoints, 1),
         save_count=None
@@ -117,4 +125,4 @@ data_input = settings["data"]
 data_identifier = settings["data_identifier"]
 outputdir = settings["output"]
 num_cores = multiprocessing.cpu_count()
-Parallel(n_jobs=num_cores - 1)(delayed(movie_from_data)(i_data) for i_data in data_input)
+Parallel(n_jobs=int(num_cores / 4))(delayed(movie_from_data)(i_data) for i_data in data_input)
