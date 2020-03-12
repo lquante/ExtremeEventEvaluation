@@ -21,6 +21,8 @@ from iris.experimental.equalise_cubes import equalise_attributes
 from iris.util import rolling_window, unify_time_units
 from ruamel.yaml import ruamel
 
+from tqdm import tqdm
+
 
 # function definition,
 # Based on code adjusted from Scitools Iris,
@@ -342,7 +344,7 @@ if (args.settings):
     args.latitude_lower_bound = settings["latitude_lower_bound"]
     args.latitude_upper_bound = settings["latitude_upper_bound"]
 
-for i_data in args.data:
+for i_data in tqdm(args.data):
     # load data file
     yaml = ruamel.yaml.YAML()
     with open(i_data, 'r') as stream:
@@ -355,7 +357,7 @@ for i_data in args.data:
 
         # GLOBAL STATISTICS
 
-        for i_settings in args.globalsettings:
+        for i_settings in tqdm(args.globalsettings):
             # load settings file
             yaml = ruamel.yaml.YAML()
             with open(i_settings, 'r') as stream:
@@ -375,7 +377,7 @@ for i_data in args.data:
 
             # get model properties for plots
 
-        for i_datafile in data:
+        for i_datafile in tqdm(data):
             model_properties = model_identification_re(i_datafile)
             model_name = (model_properties["name"])
             start_year = (model_properties["start"])
@@ -405,7 +407,7 @@ for i_data in args.data:
             # average / maximum analysis for rolling window
 
             original_varname = bounded_data.var_name
-            for i_days in time_thresholds:
+            for i_days in tqdm(time_thresholds):
 
                 averagedir = modeldir + "/average"
                 if (os.path.exists(averagedir) == True):
@@ -429,7 +431,7 @@ for i_data in args.data:
 
     # AREA STATISTICS AND GRAPHS
 
-    for i_settings in args.areasettings:
+    for i_settings in tqdm(args.areasettings):
         # load settings file
         yaml = ruamel.yaml.YAML()
         with open(i_settings, 'r') as stream:
@@ -439,7 +441,7 @@ for i_data in args.data:
                 print(exc)
         start_year = 5000
         end_year = 0
-        for i_datafile in data:
+        for i_datafile in tqdm(data):
             model_properties = model_identification_re(i_datafile)
             model_name = (model_properties["name"])
             partial_start_year = (model_properties["start"])
