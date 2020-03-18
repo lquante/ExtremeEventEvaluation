@@ -6,7 +6,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=1
-#SBATCH --time=01:00:00
+#SBATCH --time=24:00:00
 #SBATCH --output=jupyter-%j.log
 
 ###
@@ -31,11 +31,11 @@ NOTEBOOKPORT=8888
 
 # set a random port for the notebook, in case multiple notebooks are
 # on the same compute node.
-NOTEBOOKPORT=`shuf -i 8000-8500 -n 1`
+NOTEBOOKPORT=$(shuf -i 8000-8500 -n 1)
 
 # set a random port for tunneling, in case multiple connections are happening
 # on the same login node.
-TUNNELPORT=`shuf -i 8501-9000 -n 1`
+TUNNELPORT=$(shuf -i 8501-9000 -n 1)
 
 echo "On your local machine, run:"
 echo ""

@@ -21,7 +21,6 @@ import iris.coord_categorisation
 import iris.quickplot as qplt
 
 import numpy as np
-from ruamel.yaml import ruamel
 
 
 # import help methods
@@ -149,17 +148,5 @@ for i_datafile in Path(args.datadir).rglob("*.nc"):
                 fig.set_size_inches(6, 4)
                 plt.savefig(filename)
                 plt.close()
-        # special case of scalar time value, that should be plotted:
-        # if len(coord_names) == 0:
-        #     to_plot = timefiltered_data
-        #     filename = (model_name + "_" + str(start_year) + "_" + str(end_year) + "_" + str(var_name) + str(
-        #         i_date) + ".png")
-        #     # Plot the results.
-        #     qplt.pcolor(to_plot)
-        #     plt.title(var_name + " at " + str(i_date))
-        #     plt.suptitle(model_name + " from " + str(start_year) + " to " + str(end_year))
-        #     plt.gca().coastlines()
-        #     fig = matplotlib.pyplot.gcf()
-        #     fig.set_size_inches(6, 4)
-        #     plt.savefig(filename)
-        #     plt.close()
+
+    # after some plotting, generate some analyis metrics:
