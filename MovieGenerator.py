@@ -2,7 +2,6 @@
 
 import argparse
 import gc
-import multiprocessing
 import os
 from datetime import datetime
 
@@ -64,8 +63,9 @@ if not args.settings:
 
 # loads data for each datafile: (needs to contain exactly one variable) TODO: generalize
 
-def movie_from_data(i_data):
+def movie_from_data(i_data, variablename):
     basic_data = load_data_from_netcdf(i_data)
+    filter_cubes_from_cubelist(basic_data, variablename)
     concatenated_data = basic_data[0]
     variable_to_plot = concatenated_data.var_name
     variable_data = filter_cubes_from_cubelist(concatenated_data, variable_to_plot)
@@ -108,9 +108,7 @@ def movie_from_data(i_data):
     bounds_zero = [0, 1]
     bounds_extremes = list(np.arange(percentile99, data_max_hundred, 5))
     bounds = bounds_zero + bounds_extremes
-    divnorm = matplotlib.colors.BoundaryNorm(boundaries=bounds, ncolors=256)
 
-    anom_norm = matplotlib.colors.LogNorm(vmin=percentile99)
     colormap = extremes_map
 
     pcm = iris.plot.pcolormesh(start_data, cmap=colormap, vmin=percentile99, vmax=data_max_hundred)
@@ -148,9 +146,19 @@ with open(args.settings, 'r') as stream:
     except yaml.YAMLError as exc:
         print(exc)
 
-data_input = settings["data"]
+data_file = settings["data"]
+variablename = settings["variable"]
 data_identifier = settings["data_identifier"]
 outputdir = settings["output"]
-num_cores = multiprocessing.cpu_count()
+
+# load data file
+yaml = ruamel.yaml.YAML()
+with open(data_file, 'r') as stream:
+    try:
+        data_input = yaml.load(stream)
+    except yaml.YAMLError as exc:
+        print(exc)
+
+print(data_input)
 for i_data in tqdm(data_input):
-    movie_from_data(i_data)
+    movie_from_data(i_data, variablename)

@@ -58,13 +58,14 @@ for i_movies in tqdm(args.movies):
 
     outputfile = args.outputfile + str(i_movies)
 
-    cmd = cmd + ' -filter_complex "'
-    for i in rows:
-        cmd += "hstack=inputs={}[row{}];".format(len(columns), i)
-
-    for i in rows:
-        cmd += "[row{}]".format(i)
-    cmd += 'vstack=inputs={}" {}.mp4'.format(len(rows), outputfile)
-
+    cmd = cmd + ' -filter_complex '
+    if (args.columns > 1):
+        for i in rows:
+            cmd += "hstack=inputs={}".format(len(columns))
+    if (args.rows > 1):
+        for i in rows:
+            cmd += "[row{}]".format(i)
+            cmd += 'vstack=inputs={}"'.format(len(rows))
+    cmd += ' {}.mp4'.format(outputfile)
     print(cmd)
     os.system(cmd)
