@@ -235,7 +235,7 @@ def get_cube_from_cubelist(data, variablename):
 
 # model identification based on structure of filename: str("output_" + i_model + "_" + timeindex + ".nc") from Pathname Collection Helper
 def model_identification_re(filepath):
-    model = re.search('(.*/)(output_)(.*)(_)(\d{4})(\d{4})(.nc)$', filepath)
+    model = re.search('(.*/)(output_)(.*)(_)(\d{4})(\d{4})(.*)(.nc)$', filepath)
     model_properties = {}
     if (model):
 
@@ -367,67 +367,47 @@ for i_data in tqdm(args.data):
                     print(exc)
 
         variable = settings["variable"]
-        depth_thresholds = settings["depth_thresholds"]
-        time_thresholds = settings["time_thresholds"]
         quantiles = settings["quantiles"]
         outputdir = settings["output"] + "/global"
 
         if (os.path.exists(outputdir) == False):
             os.mkdir(outputdir)
 
-            # get model properties for plots
-
+        # get model properties
+        start_year = 5000
+        end_year = 0
         for i_datafile in tqdm(data):
             model_properties = model_identification_re(i_datafile)
             model_name = (model_properties["name"])
-            start_year = (model_properties["start"])
-            end_year = (model_properties["end"])
+            partial_start_year = (model_properties["start"])
+            partial_end_year = (model_properties["end"])
+            if (start_year > partial_start_year):
+                start_year = partial_start_year
+            if (end_year < partial_end_year):
+                end_year = partial_end_year
+        string_start_year = str(start_year)
+        string_end_year = str(end_year)
 
-            string_start_year = str(start_year)
-            string_end_year = str(end_year)
+        data_identifier = model_name + "_" + string_start_year + "_" + string_end_year
+        concatenated_data = concatenate_variables(data, variable)
 
-            data_identifier = model_name + "_" + string_start_year + "_" + string_end_year
+        # apply latitudinal bounds
+        latitude_constraint = iris.Constraint(
+            latitude=lambda v: args.latitude_lower_bound <= v <= args.latitude_upper_bound)
 
-            modeldir = outputdir + "/" + model_name
-            if (os.path.exists(modeldir) == True):
-                os.chdir(modeldir)
-            else:
-                os.mkdir(modeldir)
-                os.chdir(modeldir)
+        bounded_data = concatenated_data.extract(latitude_constraint)
 
-            # load data of relevant variable
-            variable_data_cube = iris.load_cube(i_datafile, variable)
+        # quantile analysis for whole timeperiod
+        modeldir = outputdir + "/" + model_name
+        if (os.path.exists(modeldir) == True):
+            os.chdir(modeldir)
+        else:
+            os.mkdir(modeldir)
+            os.chdir(modeldir)
+        original_varname = bounded_data.var_name
 
-            # apply latitudinal bounds
-            latitude_constraint = iris.Constraint(
-                latitude=lambda v: args.latitude_lower_bound <= v <= args.latitude_upper_bound)
-
-            bounded_data = variable_data_cube.extract(latitude_constraint)
-
-            # average / maximum analysis for rolling window
-
-            original_varname = bounded_data.var_name
-            for i_days in tqdm(time_thresholds):
-
-                averagedir = modeldir + "/average"
-                if (os.path.exists(averagedir) == True):
-                    os.chdir(averagedir)
-                else:
-                    os.mkdir(averagedir)
-                    os.chdir(averagedir)
-
-                average_data = average_stats(bounded_data, i_days, original_varname)
-                average_identifier = averagedir + '/' + data_identifier + '_average_analysis_days_' + str(i_days)
-                iris.save(average_data, average_identifier + '.nc')
-
-                maxdir = modeldir + "/maximum"
-                if (os.path.exists(maxdir) == False):
-                    os.mkdir(maxdir)
-                os.chdir(maxdir)
-
-                maximum_data = max_stats(bounded_data, i_days, original_varname)
-                maximum_identifier = maxdir + '/' + data_identifier + '_maximum_analysis_days_' + str(i_days)
-                iris.save(maximum_data, maximum_identifier + '.nc')
+        quantile_data = bounded_data.collapsed('time', iris.analysis.PERCENTILE, percent=quantiles)
+        iris.save(quantile_data, data_identifier + "_quantile_analysis.nc")
 
     # AREA STATISTICS AND GRAPHS
 

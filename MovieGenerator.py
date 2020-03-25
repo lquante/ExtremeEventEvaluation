@@ -65,8 +65,8 @@ if not args.settings:
 
 def movie_from_data(i_data, variablename):
     basic_data = load_data_from_netcdf(i_data)
-    filter_cubes_from_cubelist(basic_data, variablename)
-    concatenated_data = basic_data[0]
+    filtered_data = filter_cubes_from_cubelist(basic_data, variablename)
+    concatenated_data = filtered_data[0]
     variable_to_plot = concatenated_data.var_name
     variable_data = filter_cubes_from_cubelist(concatenated_data, variable_to_plot)
 
