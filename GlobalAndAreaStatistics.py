@@ -460,6 +460,7 @@ for i_data in tqdm(args.data):
                 latitude=lambda v: area_lat - 90 / 144 <= v <= area_lat + 90 / 144,
                 longitude=lambda v: area_lon - 180 / 192 <= v <= area_lon + 180 / 192)
         else:
+            # restrict on default 0.5*0.5 grids, as used for ISIMIP data
             area_constraint = iris.Constraint(
                 latitude=lambda v: area_lat - 90 / 360 <= v <= area_lat + 90 / 360,
                 longitude=lambda v: area_lon - 180 / 720 <= v <= area_lon + 180 / 720)
