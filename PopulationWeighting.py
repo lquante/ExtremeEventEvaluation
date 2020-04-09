@@ -41,6 +41,7 @@ with open(args.settings, 'r') as stream:
     except yaml.YAMLError as exc:
         print(exc)
 
+
 populationfile = settings["population"]
 data = settings["data"]
 outputdir = settings["output"]

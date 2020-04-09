@@ -203,7 +203,7 @@ def calculate_average_above_threshold_in_x_days(data, threshold, numberOfDays, r
 
 
 # experimental tools to calculate custom stats
-
+iris.cube.Cube.dim
 
 def average_stats(data, numberOfDays, original_varname):
     extended_varname = original_varname + "_average" + str(numberOfDays)
