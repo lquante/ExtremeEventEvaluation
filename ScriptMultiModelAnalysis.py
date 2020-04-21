@@ -99,7 +99,7 @@ def generate_quantile_exceedance_development(cube, baselinequantiles, quantiles,
         exceedance_data = data_timeperiod.data - quantile_baseline.data
         exceedance = data_timeperiod.copy(data=exceedance_data)
 
-        var_name = ('expected_snowfall_above_' + str(i_quantile) + 'percentile')
+        var_name = ('snowfall_above_' + str(i_quantile) + 'percentile')
         exceedance.var_name = var_name
 
         # consider only positve values of exceedance
@@ -114,6 +114,7 @@ def generate_quantile_exceedance_development(cube, baselinequantiles, quantiles,
         mean_exceedance = sum_exceedances / number_exceedances
 
         data['quantile_baseline', i_quantile] = quantile_baseline
+        data['exceedance', i_quantile] = exceedance
         data['number_exceedances', i_quantile] = number_exceedances
         data['mean_exceedance', i_quantile] = mean_exceedance
     return data
@@ -215,18 +216,23 @@ def comparison_threshold(model, basic_cubelist, number_of_decades, area_box, sta
                                                  intensity=intensity)
 
 
-def multi_region_threshold_analysis_preindustrial(modellist, arealist, intensity=True):
-    results = {}
-    for i_key in tqdm(arealist.keys()):
+def multi_region_threshold_analysis_preindustrial(modellist, arealist, start_ssp, start_historical, number_of_decades,
+                                                  intensity=True):
+    for i_area in tqdm(arealist.keys()):
         for i_model in tqdm(modellist):
-            results[i_model, 'preindustrial', i_key] = comparison_threshold(i_model, cubelist, 8, arealist[i_key], 1851,
-                                                                            2021, i_key, intensity=True)
-    filename = str(i_model) + '_preindustrial_baseline_'
-    date = datetime.datetime.now().strftime("%Y%m%d_%H:%M:%S")
-    filename = filename + str(date)
+            results = {}
+            results[i_model, 'preindustrial', i_area] = comparison_threshold(i_model, cubelist, number_of_decades,
+                                                                             arealist[i_area], start_historical,
+                                                                             start_ssp, i_area, intensity=intensity)
+            filename = str(i_model) + '_' + str(i_area) + '_preindustrial_baseline_hist_from_' + str(
+                start_historical) + 'ssp_from_' + str(
+                start_ssp) + '_' + str(number_of_decades) + "_"
+            date = datetime.datetime.now().strftime("%Y%m%d_%H:%M:%S")
+            filename = filename + str(date)
 
-    file = open(filename, 'wb')
-    pickle.dump(results, file)
+            file = open(filename, 'wb')
+            pickle.dump(results, file)
+
 
 
 # add settings argument
@@ -306,4 +312,5 @@ arealist = {}
 arealist['NORTHERN AMERICA'] = northern_america
 arealist['NORTHERN EUROPE'] = northern_europe
 
-multi_region_threshold_analysis_preindustrial(models, arealist)
+multi_region_threshold_analysis_preindustrial(models, arealist, 2021, 1851, 3)
+multi_region_threshold_analysis_preindustrial(models, arealist, 2051, 1881, 5)
