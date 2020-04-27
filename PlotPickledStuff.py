@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 # TODO: extend to multiple variables
-
+import argparse
 import os
 # Imports
 import pickle
