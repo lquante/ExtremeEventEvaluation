@@ -2,7 +2,6 @@
 
 # Imports
 import argparse
-import datetime
 import os
 import pickle
 import warnings
@@ -90,12 +89,15 @@ def extract_dates(cube, startyear, finalyear):
 
 def generate_quantile_exceedance_development(cube, baselinequantiles, quantiles, startyear, finalyear, intensity=False):
     data_timeperiod = extract_dates(cube, startyear, finalyear)
-
+    # calculate mean for comparison to quantile development
+    mean_data = data_timeperiod.collapsed('time', iris.analysis.MEAN)
     # calculate exceedance of quantiles for each gridcell to use as thresholds:
     # N.B. baselinequantile cubes to be submitted as dictionary of quantile values
     data = {}
     for i_quantile in quantiles:
         quantile_baseline = baselinequantiles[i_quantile]
+        quantile_data = data_timeperiod.collapsed('time', iris.analysis.PERCENTILE, percent=i_quantile)
+
         exceedance_data = data_timeperiod.data - quantile_baseline.data
         exceedance = data_timeperiod.copy(data=exceedance_data)
 
@@ -114,16 +116,18 @@ def generate_quantile_exceedance_development(cube, baselinequantiles, quantiles,
         mean_exceedance = sum_exceedances / number_exceedances
 
         data['quantile_baseline', i_quantile] = quantile_baseline
+        data['quantile', i_quantile] = quantile_data
         data['exceedance', i_quantile] = exceedance
         data['number_exceedances', i_quantile] = number_exceedances
         data['mean_exceedance', i_quantile] = mean_exceedance
+    data['mean'] = mean_data
     return data
 
 
-def calculate_quantile_exceedance_measure(historical_cube, ssp126_cube, ssp370_cube, ssp585_cube, baseline_quantiles,
+def calculate_quantile_exceedance_measure(historical_cube, ssp_cube, ssp_scenario, baseline_quantiles,
                                           quantiles,
                                           number_of_years_to_compare, number_of_timeperiods, historical_start,
-                                          ssp_start, intensity=False):
+                                          ssp_start, intensity=False, historical=True):
     historical_start_list = []
 
     historical_start_list.append(historical_start)
@@ -138,32 +142,23 @@ def calculate_quantile_exceedance_measure(historical_cube, ssp126_cube, ssp370_c
         ssp_start_list.append(ssp_start_list[index - 1] + number_of_years_to_compare)
 
     data = {}
-    for i_historical_start in historical_start_list:
-        i_historical_end = i_historical_start + number_of_years_to_compare - 1
-        data['historical_quantile', i_historical_start, i_historical_end] = generate_quantile_exceedance_development(
-            historical_cube, baseline_quantiles, quantiles, i_historical_start, i_historical_end, intensity=intensity)
+    if (historical):
+        for i_historical_start in historical_start_list:
+            i_historical_end = i_historical_start + number_of_years_to_compare - 1
+            data[
+                'historical_quantile', i_historical_start, i_historical_end] = generate_quantile_exceedance_development(
+                historical_cube, baseline_quantiles, quantiles, i_historical_start, i_historical_end,
+                intensity=intensity)
 
     for i_ssp_start in ssp_start_list:
         i_ssp_end = i_ssp_start + number_of_years_to_compare - 1
-        data['ssp126_quantile', i_ssp_start, i_ssp_end] = generate_quantile_exceedance_development(ssp126_cube,
-                                                                                                   baseline_quantiles,
-                                                                                                   quantiles,
-                                                                                                   i_ssp_start,
-                                                                                                   i_ssp_end,
-                                                                                                   intensity=intensity)
-        data['ssp370_quantile', i_ssp_start, i_ssp_end] = generate_quantile_exceedance_development(ssp370_cube,
-                                                                                                   baseline_quantiles,
-                                                                                                   quantiles,
-                                                                                                   i_ssp_start,
-                                                                                                   i_ssp_end,
-                                                                                                   intensity=intensity)
-        data['ssp585_quantile', i_ssp_start, i_ssp_end] = generate_quantile_exceedance_development(ssp585_cube,
-                                                                                                   baseline_quantiles,
-                                                                                                   quantiles,
-                                                                                                   i_ssp_start,
-                                                                                                   i_ssp_end,
-                                                                                                   intensity=intensity)
-
+        ssp_key = ssp_scenario + "_quantile"
+        data[ssp_key, i_ssp_start, i_ssp_end] = generate_quantile_exceedance_development(ssp_cube,
+                                                                                         baseline_quantiles,
+                                                                                         quantiles,
+                                                                                         i_ssp_start,
+                                                                                         i_ssp_end,
+                                                                                         intensity=intensity)
     return (data)
 
 
@@ -192,8 +187,8 @@ def country_filter(cubedict, country_box):
     return country_cubes
 
 
-def comparison_threshold(model, basic_cubelist, number_of_decades, area_box, start_historical, start_ssp, areaname,
-                         intensity=False):
+def comparison_threshold(model, basic_cubelist, ssp_scenario, number_of_decades, area_box, start_historical, start_ssp,
+                         intensity=False, historical=True):
     # filter data for country box:
     area_data = country_filter(basic_cubelist, area_box)
 
@@ -201,34 +196,33 @@ def comparison_threshold(model, basic_cubelist, number_of_decades, area_box, sta
     # country_data = prepare_season_stats (country_data,season)
 
     historical_cube = area_data[model, 'historical']
-    ssp126_cube = area_data[model, 'ssp126']
-    ssp370_cube = area_data[model, 'ssp370']
-    ssp585_cube = area_data[model, 'ssp585']
+    ssp_cube = area_data[model, ssp_scenario]
+
     baseline_cube = extract_dates(historical_cube, 1851, 1880)
 
     quantiles = [99, 99.73, 99.9, 99.99]
     baseline_quantiles = {}
     for i_quantile in quantiles:
         baseline_quantiles[i_quantile] = baseline_cube.collapsed('time', iris.analysis.PERCENTILE, percent=i_quantile)
-    return calculate_quantile_exceedance_measure(historical_cube, ssp126_cube, ssp370_cube, ssp585_cube,
+    return calculate_quantile_exceedance_measure(historical_cube, ssp_cube, ssp_scenario,
                                                  baseline_quantiles, quantiles,
                                                  10, number_of_decades, start_historical, start_ssp,
-                                                 intensity=intensity)
+                                                 intensity=intensity, historical=historical)
 
 
-def multi_region_threshold_analysis_preindustrial(modellist, arealist, start_ssp, start_historical, number_of_decades,
-                                                  intensity=True):
+def multi_region_threshold_analysis_preindustrial(modellist, arealist, ssp_scenario, start_ssp, start_historical,
+                                                  number_of_decades,
+                                                  intensity=True, historical=True):
     for i_area in tqdm(arealist.keys()):
         for i_model in tqdm(modellist):
             results = {}
-            results[i_model, 'preindustrial', i_area] = comparison_threshold(i_model, cubelist, number_of_decades,
+            results[i_model, 'preindustrial', i_area] = comparison_threshold(i_model, cubelist, ssp_scenario,
+                                                                             number_of_decades,
                                                                              arealist[i_area], start_historical,
-                                                                             start_ssp, i_area, intensity=intensity)
+                                                                             start_ssp, intensity=intensity)
             filename = str(i_model) + '_' + str(i_area) + '_preindustrial_baseline_hist_from_' + str(
                 start_historical) + 'ssp_from_' + str(
                 start_ssp) + '_' + str(number_of_decades) + "_"
-            date = datetime.datetime.now().strftime("%Y%m%d_%H:%M:%S")
-            filename = filename + str(date)
 
             file = open(filename, 'wb')
             pickle.dump(results, file)
@@ -308,9 +302,20 @@ northern_america = (-140, 30, -50, 60)
 
 northern_europe = (-25, 42, 44, 68)
 
+lat_lower_bound = 30
+lat_upper_bound = 90
+northern_hemisphere_first_quarter = (0, lat_lower_bound, 90, lat_upper_bound)
+northern_hemisphere_second_quarter = (90, lat_lower_bound, 180, lat_upper_bound)
+northern_hemisphere_third_quarter = (-180, lat_lower_bound, -90, lat_upper_bound)
+northern_hemisphere_fourth_quarter = (-90, lat_lower_bound, 0, lat_upper_bound)
 arealist = {}
-arealist['NORTHERN AMERICA'] = northern_america
-arealist['NORTHERN EUROPE'] = northern_europe
+# arealist['NORTHERN AMERICA'] = northern_america
+# arealist['NORTHERN EUROPE'] = northern_europe
+arealist['NORTHERN_HEMISPHERE_1'] = northern_hemisphere_first_quarter
+arealist['NORTHERN_HEMISPHERE_2'] = northern_hemisphere_second_quarter
+arealist['NORTHERN_HEMISPHERE_3'] = northern_hemisphere_third_quarter
+arealist['NORTHERN_HEMISPHERE_4'] = northern_hemisphere_fourth_quarter
 
-multi_region_threshold_analysis_preindustrial(models, arealist, 2021, 1851, 3)
-multi_region_threshold_analysis_preindustrial(models, arealist, 2051, 1881, 5)
+multi_region_threshold_analysis_preindustrial(models, arealist, 'ssp585', 2021, 1851, 3)
+multi_region_threshold_analysis_preindustrial(models, arealist, 'ssp585', 2051, 1851, 3)
+multi_region_threshold_analysis_preindustrial(models, arealist, 'ssp585', 2071, 1851, 3)
