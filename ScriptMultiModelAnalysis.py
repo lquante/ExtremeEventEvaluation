@@ -9,6 +9,7 @@ import warnings
 import iris
 import iris.analysis
 import iris.coord_categorisation
+import numpy as np
 from iris.experimental.equalise_cubes import equalise_attributes
 from iris.util import unify_time_units
 from ruamel.yaml import ruamel
@@ -87,44 +88,79 @@ def extract_dates(cube, startyear, finalyear):
     return limited_cube
 
 
-def generate_quantile_exceedance_development(cube, baselinequantiles, quantiles, startyear, finalyear, intensity=False):
-    data_timeperiod = extract_dates(cube, startyear, finalyear)
-    # calculate mean for comparison to quantile development
-    mean_data = data_timeperiod.collapsed('time', iris.analysis.MEAN)
-    # calculate exceedance of quantiles for each gridcell to use as thresholds:
-    # N.B. baselinequantile cubes to be submitted as dictionary of quantile values
-    data = {}
+def generate_quantile_exceedance_development(cubelist, baselinequantiles, quantiles, startyear, finalyear,
+                                             intensity=False):
+    cubelist_iterator = 0
+    results = {}
+    cuberesults = {}
+    number_of_cubes = len(cubelist)
+    for i_key in cubelist.keys():
+        # calculate some metrics per cube from cubelist
+        data = {}
+        for i_quantile in quantiles:
+            cube = cubelist[i_key]
+            data_timeperiod = extract_dates(cube, startyear, finalyear)
+            number_of_timepoints = data_timeperiod.data.shape[0]
+            print('timepoints for model: ' + str(i_key) + " " + str(number_of_timepoints))
+            # calculate mean for comparison to quantile development
+            mean_data = data_timeperiod.collapsed('time', iris.analysis.MEAN)
+            # calculate exceedance of quantiles for each gridcell to use as thresholds:
+            # N.B. baselinequantile cubes to be submitted as dictionary of quantile values
+
+            quantile_baseline = baselinequantiles[i_quantile]
+
+            quantile_data = data_timeperiod.collapsed('time', iris.analysis.PERCENTILE, percent=i_quantile)
+
+            exceedance_data = data_timeperiod.data - quantile_baseline.data
+            exceedance = data_timeperiod.copy(data=exceedance_data)
+
+            var_name = ('snowfall_above_' + str(i_quantile) + 'percentile')
+            exceedance.var_name = var_name
+
+            # consider only positve values of exceedance
+            exceedance_array = exceedance.data
+            exceedance_indicators = (exceedance_array > 0)
+
+            exceedance.data = exceedance_array * exceedance_indicators
+
+            number_exceedances = exceedance.collapsed('time', iris.analysis.COUNT, function=lambda x: x > 0)
+            sum_exceedances = exceedance.collapsed('time', iris.analysis.SUM)
+
+            mean_exceedance = sum_exceedances / number_exceedances
+
+            data['quantile', i_quantile] = quantile_data
+            # TODO: fix exceedance count for multi-model-ensemble
+            # data['exceedance', i_quantile] = exceedance
+            data['number_exceedances', i_quantile] = number_exceedances
+            data['sum_exceedance', i_quantile] = mean_exceedance
+            data['mean'] = mean_data
+        cuberesults[i_key] = data
+    # sum up results into a single cube
+    keys = list(cubelist.keys())
+    for i_key in cuberesults[keys[0]].keys():
+        print(keys[0])
+        print(i_key)
+        results[i_key] = cuberesults[keys[0]][i_key]
+        for i_cube in range(1, number_of_cubes):
+            print(keys[i_cube])
+            print(i_key)
+            results[i_key] = results[i_key] + cuberesults[keys[i_cube]][i_key]
+
+    # adjust average measures:
+    results['mean'] = results['mean'] / number_of_cubes
     for i_quantile in quantiles:
-        quantile_baseline = baselinequantiles[i_quantile]
-        quantile_data = data_timeperiod.collapsed('time', iris.analysis.PERCENTILE, percent=i_quantile)
+        results['quantile', i_quantile] = percentile_from_cubedict(cubelist, i_quantile)
+        results['quantile_baseline', i_quantile] = baselinequantiles[i_quantile]
+        results['mean_exceedance', i_quantile] = results['sum_exceedance', i_quantile] / results[
+            'number_exceedances', i_quantile]
+        expected_exceedances = number_of_timepoints * (100 - i_quantile) / 100
+        results['baseline_relative_mean_exceedance', i_quantile] = results[
+                                                                       'sum_exceedance', i_quantile] / expected_exceedances
 
-        exceedance_data = data_timeperiod.data - quantile_baseline.data
-        exceedance = data_timeperiod.copy(data=exceedance_data)
-
-        var_name = ('snowfall_above_' + str(i_quantile) + 'percentile')
-        exceedance.var_name = var_name
-
-        # consider only positve values of exceedance
-        exceedance_array = exceedance.data
-        exceedance_indicators = (exceedance_array > 0)
-
-        exceedance.data = exceedance_array * exceedance_indicators
-
-        number_exceedances = exceedance.collapsed('time', iris.analysis.COUNT, function=lambda x: x > 0)
-        sum_exceedances = exceedance.collapsed('time', iris.analysis.SUM)
-
-        mean_exceedance = sum_exceedances / number_exceedances
-
-        data['quantile_baseline', i_quantile] = quantile_baseline
-        data['quantile', i_quantile] = quantile_data
-        data['exceedance', i_quantile] = exceedance
-        data['number_exceedances', i_quantile] = number_exceedances
-        data['mean_exceedance', i_quantile] = mean_exceedance
-    data['mean'] = mean_data
-    return data
+    return results
 
 
-def calculate_quantile_exceedance_measure(historical_cube, ssp_cube, ssp_scenario, baseline_quantiles,
+def calculate_quantile_exceedance_measure(historical_cubelist, ssp_cubelist, ssp_scenario, baseline_quantiles,
                                           quantiles,
                                           number_of_years_to_compare, number_of_timeperiods, historical_start,
                                           ssp_start, intensity=False, historical=True):
@@ -147,13 +183,13 @@ def calculate_quantile_exceedance_measure(historical_cube, ssp_cube, ssp_scenari
             i_historical_end = i_historical_start + number_of_years_to_compare - 1
             data[
                 'historical_quantile', i_historical_start, i_historical_end] = generate_quantile_exceedance_development(
-                historical_cube, baseline_quantiles, quantiles, i_historical_start, i_historical_end,
+                historical_cubelist, baseline_quantiles, quantiles, i_historical_start, i_historical_end,
                 intensity=intensity)
 
     for i_ssp_start in ssp_start_list:
         i_ssp_end = i_ssp_start + number_of_years_to_compare - 1
         ssp_key = ssp_scenario + "_quantile"
-        data[ssp_key, i_ssp_start, i_ssp_end] = generate_quantile_exceedance_development(ssp_cube,
+        data[ssp_key, i_ssp_start, i_ssp_end] = generate_quantile_exceedance_development(ssp_cubelist,
                                                                                          baseline_quantiles,
                                                                                          quantiles,
                                                                                          i_ssp_start,
@@ -187,7 +223,25 @@ def country_filter(cubedict, country_box):
     return country_cubes
 
 
-def comparison_threshold(model, basic_cubelist, ssp_scenario, number_of_decades, area_box, start_historical, start_ssp,
+def percentile_from_cubedict(cubedict, percentile):
+    # extract data from cubes and merge
+    keys = list(cubedict.keys())
+    dataarray = cubedict[keys[0]].data
+    for i in range(1, len(cubedict)):
+        np.concatenate((dataarray, cubedict[keys[i]].data), axis=0)
+    # calculate percentile
+    percentile_data = np.percentile(dataarray, percentile, axis=0)
+
+    # construct percentile cube to return
+    percentile_cube = cubedict[keys[0]].collapsed('time', iris.analysis.PERCENTILE, percent=percentile)
+    # replace data with data from all cubes
+    percentile_cube.data = percentile_data
+
+    return percentile_cube
+
+
+def comparison_threshold(modellist, basic_cubelist, ssp_scenario, number_of_decades, area_box, start_historical,
+                         start_ssp,
                          intensity=False, historical=True):
     # filter data for country box:
     area_data = country_filter(basic_cubelist, area_box)
@@ -195,16 +249,21 @@ def comparison_threshold(model, basic_cubelist, ssp_scenario, number_of_decades,
     # filter for season to reduce computational load, winter snowfalls anyway top percentile most likely
     # country_data = prepare_season_stats (country_data,season)
 
-    historical_cube = area_data[model, 'historical']
-    ssp_cube = area_data[model, ssp_scenario]
+    # merge model cubes into ensemble cube
 
-    baseline_cube = extract_dates(historical_cube, 1851, 1880)
+    historical_ensemble_cubelist = {}
+    ssp_ensemble_cubelist = {}
+    baseline_ensemble_cubelist = {}
+    for i_model in modellist:
+        historical_ensemble_cubelist[i_model] = (area_data[i_model, 'historical'])
+        ssp_ensemble_cubelist[i_model] = (area_data[i_model, ssp_scenario])
+        baseline_ensemble_cubelist[i_model] = (extract_dates(area_data[i_model, 'historical'], 1851, 1880))
 
-    quantiles = [99, 99.73, 99.9, 99.99]
+    quantiles = [99, 99.9]
     baseline_quantiles = {}
     for i_quantile in quantiles:
-        baseline_quantiles[i_quantile] = baseline_cube.collapsed('time', iris.analysis.PERCENTILE, percent=i_quantile)
-    return calculate_quantile_exceedance_measure(historical_cube, ssp_cube, ssp_scenario,
+        baseline_quantiles[i_quantile] = percentile_from_cubedict(baseline_ensemble_cubelist, i_quantile)
+    return calculate_quantile_exceedance_measure(historical_ensemble_cubelist, ssp_ensemble_cubelist, ssp_scenario,
                                                  baseline_quantiles, quantiles,
                                                  10, number_of_decades, start_historical, start_ssp,
                                                  intensity=intensity, historical=historical)
@@ -214,15 +273,14 @@ def multi_region_threshold_analysis_preindustrial(modellist, arealist, ssp_scena
                                                   number_of_decades,
                                                   intensity=True, historical=True):
     for i_area in tqdm(arealist.keys()):
-        for i_model in tqdm(modellist):
-            results = {}
-            results[i_model, 'preindustrial', i_area] = comparison_threshold(i_model, cubelist, ssp_scenario,
-                                                                             number_of_decades,
-                                                                             arealist[i_area], start_historical,
-                                                                             start_ssp, intensity=intensity)
-            filename = str(i_model) + '_' + str(i_area) + '_preindustrial_baseline_hist_from_' + str(
-                start_historical) + 'ssp_from_' + str(
-                start_ssp) + '_' + str(number_of_decades) + "_"
+        results = {}
+        results['ensemble', 'preindustrial', i_area] = comparison_threshold(modellist, cubelist, ssp_scenario,
+                                                                            number_of_decades,
+                                                                            arealist[i_area], start_historical,
+                                                                            start_ssp, intensity=intensity)
+        filename = str('ensemble') + '_' + str(i_area) + '_preindustrial_baseline_hist_from_' + str(
+            start_historical) + 'ssp_from_' + str(
+            start_ssp) + '_' + str(number_of_decades) + "_"
 
             file = open(filename, 'wb')
             pickle.dump(results, file)
