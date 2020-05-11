@@ -11,6 +11,7 @@ import iris
 import iris.coord_categorisation
 import iris.plot as iplt
 import matplotlib.colors as clr
+import matplotlib.path as mpath
 import matplotlib.pyplot as plt
 import numpy as np
 from ruamel.yaml import ruamel
@@ -45,10 +46,21 @@ def plot_difference_cube(cube, scenario_data, startyear_data, finalyear_data, sc
     colormap = plt.get_cmap('RdBu_r', 30)
 
     pcm = iris.plot.pcolormesh(cube, cmap=colormap, vmin=vmin, vmax=vmax)
-    plt.gca().coastlines('10m')
+    plt.gca().add_feature(cartopy.feature.OCEAN, zorder=100, edgecolor='w')
+    plt.gca().coastlines('110m')
     plt.gca().gridlines()
-    plt.gca().add_feature(cartopy.feature.OCEAN, zorder=100, edgecolor='k')
-    plt.colorbar(pcm, extend='both', orientation='horizontal', label=label)
+
+    # https: // scitools.org.uk / cartopy / docs / latest / gallery / always_circular_stereo.html?highlight = circular
+    # Compute a circle in axes coordinates, which we can use as a boundary
+    # for the map. We can pan/zoom as much as we like - the boundary will be
+    # permanently circular.
+    theta = np.linspace(0, 2 * np.pi, 100)
+    center, radius = [0.5, 0.5], 0.5
+    verts = np.vstack([np.sin(theta), np.cos(theta)]).T
+    circle = mpath.Path(verts * radius + center)
+    plt.gca().set_boundary(circle, transform=plt.gca().transAxes)
+
+    plt.colorbar(pcm, shrink=0.7, extend='both', orientation='horizontal', label=label)
 
     plt.title(scenario_data + ": " + str(startyear_data) + " to " + str(finalyear_data) + "\n -" +
               scenario_comparison + ": " + str(startyear_comparison) + " to " + str(finalyear_comparison), fontsize=10)
@@ -59,10 +71,21 @@ def plot_ratio_cube(cube, scenario_data, startyear_data, finalyear_data, scenari
     colormap = plt.get_cmap('RdBu_r', 30)
 
     pcm = iris.plot.pcolormesh(cube, cmap=colormap, vmin=0, vmax=2)
-    plt.gca().coastlines('10m')
+    plt.gca().add_feature(cartopy.feature.OCEAN, zorder=100, edgecolor='w')
+    plt.gca().coastlines('110m')
     plt.gca().gridlines()
-    plt.gca().add_feature(cartopy.feature.OCEAN, zorder=100, edgecolor='k')
-    plt.colorbar(pcm, extend='both', orientation='horizontal', label=label)
+
+    # https: // scitools.org.uk / cartopy / docs / latest / gallery / always_circular_stereo.html?highlight = circular
+    # Compute a circle in axes coordinates, which we can use as a boundary
+    # for the map. We can pan/zoom as much as we like - the boundary will be
+    # permanently circular.
+    theta = np.linspace(0, 2 * np.pi, 100)
+    center, radius = [0.5, 0.5], 0.5
+    verts = np.vstack([np.sin(theta), np.cos(theta)]).T
+    circle = mpath.Path(verts * radius + center)
+    plt.gca().set_boundary(circle, transform=plt.gca().transAxes)
+
+    plt.colorbar(pcm, shrink=0.7, extend='both', orientation='horizontal', label=label)
 
     plt.title(scenario_data + ": " + str(startyear_data) + " to " + str(finalyear_data) + "\n -" +
               scenario_comparison + ": " + str(startyear_comparison) + " to " + str(finalyear_comparison), fontsize=10)
@@ -84,35 +107,28 @@ def plot_ensemble_average_quantile_baseline(file, scenario, start_years,
     label_quantile_ratio = 'ratio of percentile / baseline percentile'
     label_es_ratio = 'ratio of expected extreme snowfall (EES) / baseline EES'
 
-    label_ratio_diff = "difference of percentile and expected snofall to resp. baseline ratio"
+    label_mean_ratio = 'ratio of mean daily snowfall / baseline '
 
     modelname = 'ISIMIP_3b_primary_model_average'
     with open(file, 'rb') as stream:
         data_to_plot = (pickle.load(stream))
-    # dict_to_plot[i_start_year, 'diff_frequency'] = diff_frequency_average[i_start_year]
-    # dict_to_plot[i_start_year, 'diff_es'] = diff_expected_snowfall_average[i_start_year]
-    # dict_to_plot[i_start_year, 'diff_relative'] = diff_expected_snowfall_average_relative[i_start_year]
 
-    # dict_to_plot[i_start_year, 'quantile_ratio'] = quantile_baseline_ratio[i_start_year]
-    # dict_to_plot[i_start_year, 'es_ratio'] = expected_snowfall_ratio[i_start_year]
-    # dict_to_plot[i_start_year, 'diff_ratios'] = diff_ratios[i_start_year]
-
-    quantile = (list(data_to_plot.keys())[0][0])
+    quantile = (list(data_to_plot.keys())[1][0])
 
     number_of_timeperiods = len(start_years)
 
     diff_freq_key = 'diff_frequency'
     diff_es_key = 'diff_es'
-    diff_rel_es_key = 'diff_relative'
+    diff_rel_es_key = 'diff_es_baseline'
 
     quantile_ratio_key = 'quantile_ratio'
     es_ratio_key = 'es_ratio'
-    diff_ratio_key = 'diff_ratios'
+    mean_ratio_key = 'mean_ratio'
     projection_crs = cartopy.crs.AzimuthalEquidistant(central_latitude=90)
     if (quantile_ratios):
         number_of_columns = 3
         fig, fig_axs = plt.subplots(ncols=number_of_columns, nrows=number_of_timeperiods,
-                                    figsize=(18, 4 * number_of_timeperiods))
+                                    figsize=(5.5 * number_of_columns, 5 * number_of_timeperiods))
         gs = fig_axs[0, 0].get_gridspec()
         # remove the underlying axes
         for i in range(0, number_of_columns):
@@ -121,8 +137,14 @@ def plot_ensemble_average_quantile_baseline(file, scenario, start_years,
         for i in range(0, number_of_timeperiods):
             final_year = start_years[i] + timeperiod_length - 1
 
-            # quantile ratio
+            # mean ratio
             fig.add_subplot(gs[i, 0], projection=projection_crs)
+            plot_ratio_cube(data_to_plot[quantile, start_years[i], mean_ratio_key], scenario, start_years[i],
+                            final_year, reference_scenario,
+                            reference_start_year, reference_final_year, quantile, label_mean_ratio)
+
+            # quantile ratio
+            fig.add_subplot(gs[i, 1], projection=projection_crs)
 
             plot_ratio_cube(data_to_plot[quantile, start_years[i], quantile_ratio_key], scenario, start_years[i],
                             final_year,
@@ -130,33 +152,41 @@ def plot_ensemble_average_quantile_baseline(file, scenario, start_years,
                             label_quantile_ratio)
 
             # es ratio
-            fig.add_subplot(gs[i, 1], projection=projection_crs)
+            fig.add_subplot(gs[i, 2], projection=projection_crs)
 
             plot_ratio_cube(data_to_plot[quantile, start_years[i], es_ratio_key], scenario, start_years[i], final_year,
                             reference_scenario, reference_start_year, reference_final_year, quantile, label_es_ratio)
 
-            # ratio diff
-            fig.add_subplot(gs[i, 2], projection=projection_crs)
-            plot_difference_cube(data_to_plot[quantile, start_years[i], diff_ratio_key], scenario, start_years[i],
-                                 final_year, reference_scenario,
-                                 reference_start_year, reference_final_year, quantile, -2, 2, label_ratio_diff)
+
 
         plt.tight_layout()
-        filename = 'quantile_baseline_ratio_maps_' + str(quantile) + '_' + str(
+        filename = 'baseline_ratio_maps_' + str(modelname) + '_' + str(quantile) + '_' + str(
             areaname) + '_' + reference_scenario + '_vs_' + scenario + '_' + str(start_years[0]) + '_' + str(final_year)
         suptitle = str(modelname) + " - " + str(
             areaname) + '- \n' + scenario + ' versus ' + reference_scenario + '\n  ratio to baseline ' + str(
             quantile) + ' percentile'
-        fig.subplots_adjust(top=0.875)
+        fig.subplots_adjust(top=0.85)
         plt.suptitle(suptitle, y=0.95)
+
 
         plt.savefig(filename + '.png', dpi=300, bbox_inches='tight')
         plt.show()
         plt.close()
 
     if (maps):
-        freq_max_value = 100
-        es_max_value = 250
+        if (quantile == 99.9):
+            freq_max_value = 20
+            es_max_value = 100
+            es_rel_max_value = 200
+        else:
+            if (quantile == 99):
+                freq_max_value = 100
+                es_max_value = 50
+                es_rel_max_value = 100
+            else:
+                freq_max_value = 100
+                es_max_value = 50
+                es_rel_max_value = 100
         number_of_columns = 3
         fig, fig_axs = plt.subplots(ncols=number_of_columns, nrows=number_of_timeperiods,
                                     figsize=(5.5 * number_of_columns, 5 * number_of_timeperiods))
@@ -189,6 +219,7 @@ def plot_ensemble_average_quantile_baseline(file, scenario, start_years,
 
             # baseline_normed_es_difference
             fig.add_subplot(gs[i, 2], projection=projection_crs)
+            print(data_to_plot[quantile, start_years[i], diff_rel_es_key])
             plot_difference_cube(data_to_plot[quantile, start_years[i], diff_rel_es_key], scenario, start_years[i],
                                  final_year, reference_scenario, reference_start_year, reference_final_year, quantile,
                                  -es_max_value,
@@ -244,15 +275,14 @@ start_years = settings['start_years']
 os.chdir(outputdir)
 i=0
 for i_file in filelist:
-
-        for i_start_years in start_years:
-            scenario = 'ssp585'
+    scenario = 'ssp585'
             timeperiod_length = 10
             reference_scenario = 'historical'
             reference_start_year = 1851
             reference_final_year = 1880
-            areaname = areanames[i]
+    areaname = areanames[i]
+    i_start_years = start_years[i]
             plot_ensemble_average_quantile_baseline(i_file, scenario, i_start_years, timeperiod_length,
                                                     reference_scenario, reference_start_year,
                                                     reference_final_year, areaname, maps=True, quantile_ratios=True)
-        i+=1
+    i += 1
