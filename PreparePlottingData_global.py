@@ -4,6 +4,7 @@ import argparse
 import os
 import pickle
 
+import cf_units
 import iris
 import iris.analysis
 import iris.coord_categorisation
@@ -77,13 +78,18 @@ def data_collection(results, scenario, start_year, final_year, timeperiod_length
     return reference_collection
 
 
-def quantile_collection(results, scenario, start_year, final_year, timeperiod_length):
+def quantile_collection(results, scenario, start_year, final_year, timeperiod_length, rolling_window=False):
     data_timeperiod = final_year - start_year + 1
     number_of_timeperiods = data_timeperiod / timeperiod_length
-
     quantile_data = []
-    for year in range(start_year, final_year, timeperiod_length):
-        quantile_data.append(results[scenario + '_quantile', year, year + timeperiod_length - 1])
+    for year in range(start_year, final_year + 1, timeperiod_length):
+        quantile_data.append(results[scenario, year, year + timeperiod_length - 1])
+    # extension if rolling window data
+    if rolling_window:
+        quantile_data = []
+        number_of_timeperiods = data_timeperiod - timeperiod_length + 1
+        for year in range(start_year, final_year - timeperiod_length + 1 + 1, 1):
+            quantile_data.append(results[scenario, year, year + timeperiod_length - 1])
 
     # prepare quantile cubes
     quantile_cubelists = {}
@@ -104,14 +110,14 @@ def quantile_collection(results, scenario, start_year, final_year, timeperiod_le
             reference_cube.remove_coord('year')
         for i_cube in quantile_cubelists[i_key]:
             reference_cube += i_cube
-        time_coord = iris.coords.AuxCoord(start_year + timeperiod_length * number_of_timeperiods / 2 - 1,
+        time_coord = iris.coords.AuxCoord(start_year + data_timeperiod / 2 - 1,
                                           long_name='year', units='1', bounds=(start_year, final_year))
         reference_cube.add_aux_coord(time_coord)
         quantile_cubes[i_key] = reference_cube
         print(reference_cube)
 
     for i_key in quantile_cubelists.keys():
-        quantile_cubes[i_key] = quantile_cubes[i_key]
+        quantile_cubes[i_key] = quantile_cubes[i_key] / number_of_timeperiods
 
     reference_collection = {}
     reference_collection['quantiles'] = quantile_cubes
@@ -137,9 +143,16 @@ def concatenate_cube_dict(cubedict):
     return start_cube
 
 
-def ensemble_average_quantile_baseline(quantile, modellist, results, scenario, start_years,
+def mask_close_to_0_values(cube):
+    zero_mask = np.where(cube.data < 10, True, False)
+    cube_masked = cube.copy()
+    cube_masked.data = np.ma.array(cube.data, mask=zero_mask)
+    return cube_masked
+
+
+def ensemble_average_quantile_baseline(quantile, modellist, results, ref_results, scenario, start_years,
                                        timeperiod_length, reference_scenario, reference_start_year,
-                                       reference_final_year):
+                                       reference_final_year, rolling_window=False):
     dict_to_plot = {}
     reference_data = {}
     data = {}
@@ -184,6 +197,7 @@ def ensemble_average_quantile_baseline(quantile, modellist, results, scenario, s
     data_mean_average = {}
     diff_mean_average = {}
     mean_ratios = {}
+    frequency_ratios = {}
     diff_frequency_average = {}
     diff_expected_snowfall_average = {}
     diff_es_baseline_relative = {}
@@ -194,12 +208,15 @@ def ensemble_average_quantile_baseline(quantile, modellist, results, scenario, s
     for i_start_year in start_years:
         start_year = i_start_year
         final_year = start_year + timeperiod_length - 1
+        print(start_year)
+        print(final_year)
         for i_model in modellist:
-            reference_data[i_model] = quantile_collection(results[i_model],
+            # TODO: balanced approach to get reference period with equally weighted rolling window decades, for now: just average the consecutive decades
+            reference_data[i_model] = quantile_collection(ref_results[i_model],
                                                           reference_scenario, reference_start_year,
-                                                          reference_final_year, timeperiod_length)
+                                                          reference_final_year, timeperiod_length, rolling_window=False)
             data[i_model] = quantile_collection(results[i_model], scenario, start_year, final_year,
-                                                timeperiod_length)
+                                                timeperiod_length, rolling_window=rolling_window)
             baseline[i_model] = reference_data[i_model]['quantiles'][quantile_key, quantile]
             ref_mean[i_model] = reference_data[i_model]['quantiles']['mean']
             data_mean[i_model] = data[i_model]['quantiles']['mean']
@@ -224,7 +241,9 @@ def ensemble_average_quantile_baseline(quantile, modellist, results, scenario, s
 
             # add time coordinate to identify scenario decade from which the difference stems, to prepare timeplots of development
             time_coord = iris.coords.AuxCoord(start_year + timeperiod_length / 2 - 1,
-                                              long_name='scenaro_year', units='1', bounds=(start_year, final_year))
+                                              long_name='scenario_year',
+                                              units=cf_units.Unit('years since 0000-01-01', calendar='gregorian'),
+                                              bounds=(start_year, final_year))
 
             diff_frequency[i_model] = data_frequency[i_model] - ref_frequency[i_model]
             diff_frequency[i_model].add_aux_coord(time_coord)
@@ -234,14 +253,26 @@ def ensemble_average_quantile_baseline(quantile, modellist, results, scenario, s
                                                  ref_expected_snowfall_rel_baseline[i_model]
             diff_es_baseline_relative[i_model].add_aux_coord(time_coord)
         baseline_average[i_start_year] = ensemble_average(modellist, baseline)
-
+        # mask data where quantile ==0
+        baseline_average[i_start_year] = mask_close_to_0_values(baseline_average[i_start_year])
         ref_mean_average[i_start_year] = ensemble_average(modellist, ref_mean)
 
         data_mean_average[i_start_year] = ensemble_average(modellist, data_mean)
-        diff_mean_average[i_start_year] = data_mean_average[i_start_year] - ref_mean_average[i_start_year]
-        quantile_average[i_start_year] = ensemble_average(modellist, quantile_dict)
-        quantile_baseline_ratio[i_start_year] = quantile_average[i_start_year] / baseline_average[i_start_year]
 
+        # add time coordinate to identify scenario decade from which the difference stems, to prepare timeplots of development
+        time_coord = iris.coords.AuxCoord(start_year + timeperiod_length / 2 - 1,
+                                          long_name='scenario_year',
+                                          units=cf_units.Unit('years since 0000-01-01 00:00:00', calendar='gregorian'))
+        # , bounds=(start_year, final_year))
+
+        diff_mean_average[i_start_year] = data_mean_average[i_start_year] - ref_mean_average[i_start_year]
+        diff_mean_average[i_start_year].add_aux_coord(time_coord)
+        quantile_average[i_start_year] = ensemble_average(modellist, quantile_dict)
+
+        # mask data where quantile ==0
+
+        quantile_baseline_ratio[i_start_year] = quantile_average[i_start_year] / baseline_average[i_start_year]
+        quantile_baseline_ratio[i_start_year].add_aux_coord(time_coord)
         ref_frequency_average[i_start_year] = ensemble_average(modellist, ref_frequency)
 
         ref_expected_snowfall_average[i_start_year] = ensemble_average(modellist, ref_expected_snowfall)
@@ -253,22 +284,28 @@ def ensemble_average_quantile_baseline(quantile, modellist, results, scenario, s
                                                                                      data_expected_snowfall_rel_baseline)
         diff_frequency_average[i_start_year] = data_frequency_average[i_start_year] - ref_frequency_average[
             i_start_year]
+        diff_frequency_average[i_start_year].add_aux_coord(time_coord)
+        frequency_ratios[i_start_year] = data_frequency_average[i_start_year] / ref_frequency_average[i_start_year]
+
+        frequency_ratios[i_start_year].add_aux_coord(time_coord)
         diff_expected_snowfall_average[i_start_year] = (
                 data_expected_snowfall_average[i_start_year] - ref_expected_snowfall_average[i_start_year])
+
+        diff_expected_snowfall_average[i_start_year].add_aux_coord(time_coord)
+
         diff_expected_snowfall_average_relative[i_start_year] = diff_expected_snowfall_average[i_start_year] / \
                                                                 baseline_average[i_start_year]
-
+        diff_expected_snowfall_average_relative[i_start_year].add_aux_coord(time_coord)
         diff_es_baseline_relative_average[i_start_year] = data_expected_snowfall_rel_baseline_average[i_start_year] - \
                                                           ref_expected_snowfall_rel_baseline_average[i_start_year]
-
+        diff_es_baseline_relative_average[i_start_year].add_aux_coord(time_coord)
         expected_snowfall_ratio[i_start_year] = data_expected_snowfall_average[i_start_year] / \
                                                 ref_expected_snowfall_average[i_start_year]
-
+        expected_snowfall_ratio[i_start_year].add_aux_coord(time_coord)
         mean_ratios[start_year] = data_mean_average[i_start_year] / ref_mean_average[i_start_year]
+
+        mean_ratios[start_year].add_aux_coord(time_coord)
         # copy cube to avoid problems with units
-        diff_ratios[i_start_year] = expected_snowfall_ratio[i_start_year].copy()
-        (diff_ratios[i_start_year]).data = (expected_snowfall_ratio[i_start_year]).data - (
-            quantile_baseline_ratio[i_start_year]).data
 
         # ref_ensemble_exceedances[i_start_year] = concatenate_cube_dict(ref_exceedances)
         # data_ensemble_exceedances[i_start_year] = concatenate_cube_dict(data_exceedances)
@@ -280,61 +317,61 @@ def ensemble_average_quantile_baseline(quantile, modellist, results, scenario, s
         dict_to_plot[i_start_year, 'diff_mean'] = diff_mean_average[i_start_year]
         dict_to_plot[quantile, i_start_year, 'diff_frequency'] = diff_frequency_average[i_start_year]
         dict_to_plot[quantile, i_start_year, 'diff_es'] = diff_expected_snowfall_average[i_start_year]
-        dict_to_plot[quantile, i_start_year, 'diff_relative'] = diff_expected_snowfall_average_relative[i_start_year]
         dict_to_plot[quantile, i_start_year, 'diff_es_baseline'] = diff_es_baseline_relative_average[i_start_year]
-        dict_to_plot[quantile, i_start_year, 'quantile_ratio'] = quantile_baseline_ratio[i_start_year]
-        dict_to_plot[quantile, i_start_year, 'es_ratio'] = expected_snowfall_ratio[i_start_year]
+
         dict_to_plot[quantile, i_start_year, 'mean_ratio'] = mean_ratios[i_start_year]
+        dict_to_plot[quantile, i_start_year, 'frequency_ratio'] = frequency_ratios[i_start_year]
+        dict_to_plot[quantile, i_start_year, 'percentile_ratio'] = quantile_baseline_ratio[i_start_year]
+        dict_to_plot[quantile, i_start_year, 'es_ratio'] = expected_snowfall_ratio[i_start_year]
 
         dict_to_plot[i_start_year, 'diff_mean'].var_name = 'diff_mean'
         dict_to_plot[quantile, i_start_year, 'diff_frequency'].var_name = 'diff_frequency'
         dict_to_plot[quantile, i_start_year, 'diff_es'].var_name = 'diff_es'
-        dict_to_plot[quantile, i_start_year, 'diff_relative'].var_name = 'diff_relative'
         dict_to_plot[quantile, i_start_year, 'diff_es_baseline'].var_name = 'diff_es_baseline'
-        dict_to_plot[quantile, i_start_year, 'quantile_ratio'].var_name = 'quantile_ratio'
+        dict_to_plot[quantile, i_start_year, 'frequency_ratio'].var_name = 'frequency_ratio'
+        dict_to_plot[quantile, i_start_year, 'percentile_ratio'].var_name = 'percentile_ratio'
         dict_to_plot[quantile, i_start_year, 'es_ratio'].var_name = 'es_ratio'
         dict_to_plot[quantile, i_start_year, 'mean_ratio'].var_name = 'mean_ratio'
 
-        start_year = iris.coords.AuxCoord(i_start_year, long_name='time', units='years')
 
-        dict_to_plot[i_start_year, 'diff_mean'].add_aux_coord(start_year)
-        dict_to_plot[quantile, i_start_year, 'diff_frequency'].add_aux_coord(start_year)
-        dict_to_plot[quantile, i_start_year, 'diff_es'].add_aux_coord(start_year)
-        dict_to_plot[quantile, i_start_year, 'diff_relative'].add_aux_coord(start_year)
-        dict_to_plot[quantile, i_start_year, 'diff_es_baseline'].add_aux_coord(start_year)
-        dict_to_plot[quantile, i_start_year, 'quantile_ratio'].add_aux_coord(start_year)
-        dict_to_plot[quantile, i_start_year, 'es_ratio'].add_aux_coord(start_year)
-        dict_to_plot[quantile, i_start_year, 'mean_ratio'].add_aux_coord(start_year)
 
     return dict_to_plot
 
 
-def ensemble_quantile_average(modellist, quantiles, all_results, comparisonname, areaname, start_years):
+def ensemble_quantile_average(modellist, scenarios, quantiles, all_results, all_ref_results, comparisonname, areaname,
+                              start_years, timeperiod_length, rolling_window=False):
     ensemble_results = {}
+    ref_ensemble_results = {}
     for i_model in modellist:
         ensemble_results[i_model] = specify_results(all_results, i_model, comparisonname, areaname)
+        ref_ensemble_results[i_model] = specify_results(all_ref_results, i_model, comparisonname, areaname)
+    # adjust start years for rolling window:
+    if (rolling_window):
+        min_start_year = np.min(start_years)
+        max_start_year = np.max(start_years)
+        stepsize = 1
+        start_years = range(min_start_year, max_start_year + 1, stepsize)
 
-    scenarios = ['ssp585']
     reference_scenarios = ['historical']
     plotting_data = {}
     for i_quantile in quantiles:
         for i_scenario in scenarios:
             for i_reference_scenario in reference_scenarios:
                 plotting_data[i_quantile, i_scenario, i_reference_scenario] = ensemble_average_quantile_baseline(
-                    i_quantile, modellist, ensemble_results, i_scenario,
-                    start_years, 10,
-                    i_reference_scenario, 1851, 1880)
+                    i_quantile, modellist, ensemble_results, ref_ensemble_results, i_scenario,
+                    start_years, timeperiod_length,
+                    i_reference_scenario, 1851, 1880, rolling_window=rolling_window)
 
     return plotting_data
 
 
 # add settings argument
 
-parser = argparse.ArgumentParser(description="Calculate some analysis metrics on specified data files")
+parser = argparse.ArgumentParser(
+    description="Calculate some analysis metrics on specified data files and pickle them for use in a plotting module")
 
 # settings file import
 # argument parser definition
-parser = argparse.ArgumentParser(description="Generate a movie on the time dimension of Geo-referenced netcdf file(s)")
 # path to *.yml file with settings to be used
 parser.add_argument(
     "--settings"
@@ -358,11 +395,14 @@ with open(args.settings, 'r') as stream:
         print(exc)
 
 filelist = settings['files']
+reference_files = settings['reference_files']
 outputdir = settings['outputdir']
 areanames = settings['areanames']
+scenarios = settings['scenarios']
 quantiles = settings['quantiles']
 start_years = settings['start_years']
-
+timeperiod_length = settings['timeperiod_length']
+rolling_window = settings['rolling_window']
 # set outputpath for plots etc
 os.chdir(outputdir)
 
@@ -377,6 +417,17 @@ all_results = dict(partial_results[0])
 for i in range(1, number_models):
     all_results.update(partial_results[i])
 
+# load reference results data
+partial_ref_results = []
+for i_file in reference_files:
+    with open(i_file, 'rb') as stream:
+        partial_ref_results.append(pickle.load(stream))
+number_models = len(partial_ref_results)
+print(number_models)
+all_ref_results = dict(partial_ref_results[0])
+for i in range(1, number_models):
+    all_ref_results.update(partial_ref_results[i])
+
 # define models to be handled separatly
 modellist = [
     'ensemble']
@@ -385,8 +436,10 @@ for i_start_years in tqdm(start_years):
     cache_plotting_data = {}
 
     for i_areaname in tqdm(areanames):
-        cache_plotting_data[i_areaname] = ensemble_quantile_average(modellist, quantiles, all_results, 'preindustrial',
-                                                                    i_areaname, i_start_years)
+        cache_plotting_data[i_areaname] = ensemble_quantile_average(modellist, scenarios, quantiles, all_results,
+                                                                    all_ref_results, 'preindustrial',
+                                                                    i_areaname, i_start_years, timeperiod_length,
+                                                                    rolling_window=rolling_window)
     for i_key in tqdm(cache_plotting_data[areanames[0]].keys()):
         quantile = i_key[0]
         scenario = i_key[1]
@@ -399,7 +452,11 @@ for i_start_years in tqdm(start_years):
             equalise_attributes(partial_data_cubelist)
             unify_time_units(partial_data_cubelist)
             global_plotting_data[i_second_key] = partial_data_cubelist.concatenate_cube(check_aux_coords=False)
-            filename = 'frequency_es_quantile_ratios_' + str('global') + "_" + str('preindustrial') + "_" + str(
-                scenario) + "_" + str(ref_scenario) + "_" + str(quantile) + "_" + str(start_years[0])
-            file = open(filename, 'wb')
-            pickle.dump(global_plotting_data, file)
+        min_start_year = np.min(start_years)
+        max_start_year = np.max(start_years)
+
+        filename = 'frequency_es_quantile_ratios_' + str('global') + "_" + str('preindustrial') + "_" + str(
+            scenario) + "_" + str(ref_scenario) + "_" + str(quantile) + "_" + str(min_start_year) + "_" + str(
+            max_start_year) + "_" + str(rolling_window)
+        file = open(filename, 'wb')
+        pickle.dump(global_plotting_data, file)
