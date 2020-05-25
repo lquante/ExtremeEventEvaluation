@@ -2,6 +2,7 @@
 
 
 import argparse
+import multiprocessing
 import os
 # Imports
 import pickle
@@ -20,6 +21,7 @@ import matplotlib.path as mpath
 import matplotlib.pyplot as plt
 import numpy as np
 from iris.util import unify_time_units
+from joblib import Parallel, delayed
 from ruamel.yaml import ruamel
 from shapely.geometry import Point
 # define colormap whitefilling 0 values
@@ -75,16 +77,11 @@ def cube_area_average(cube, boundingbox):
     return area_cube.collapsed(('latitude', 'longitude'), iris.analysis.MEAN)
 
 
-def concatenate_cube_dict(cubedict, maskgeometry):
+def concatenate_cube_dict(cubedict, maskfile):
     keys = list(cubedict.keys())
     initial_cube = cubedict[keys[0]]
-    # cube_mask = get_mask(initial_cube, maskgeometry)
-    # cube_mask = cube_mask > 0
-    # file = open('/p/tmp/quante/ExtremeEventEvaluation/ocean_mask_110', 'wb')
-    #
-    # pickle.dump(cube_mask, file)
 
-    file = open('/p/tmp/quante/ExtremeEventEvaluation/ocean_mask_110', 'rb')
+    file = open(maskfile, 'rb')
     cube_mask = pickle.load(file)
 
     cubelist = iris.cube.CubeList([iris.util.mask_cube(initial_cube, cube_mask)])
@@ -98,7 +95,7 @@ def concatenate_cube_dict(cubedict, maskgeometry):
 # plotting of maps of cubes
 
 
-def plot_difference_cube(cube, scenario_data, modelname, quantile, startyear_data, finalyear_data, scenario_comparison,
+def plot_difference_cube(cube, scenario_data, model, quantile, startyear_data, finalyear_data, scenario_comparison,
                          startyear_comparison,
                          finalyear_comparison, projection, vmin, vmax, label):
     colormap = plt.get_cmap('RdBu_r', 30)
@@ -121,17 +118,17 @@ def plot_difference_cube(cube, scenario_data, modelname, quantile, startyear_dat
     plt.colorbar(pcm, shrink=0.7, extend='both', orientation='horizontal', label=label)
 
     plt.title(
-        modelname + " percentile: " + str(quantile) + "\n" + scenario_data + ": " + str(startyear_data) + " to " + str(
+        model + " percentile: " + str(quantile) + "\n" + scenario_data + ": " + str(startyear_data) + " to " + str(
             finalyear_data) +
         scenario_comparison + ": " + str(startyear_comparison) + " to " + str(finalyear_comparison), fontsize=10)
 
 
 def plot_ratio_cube(cube, scenario_data, modelname, quantile, startyear_data, finalyear_data, scenario_comparison,
                     startyear_comparison,
-                    finalyear_comparison, projection, label):
+                    finalyear_comparison, projection, label, vmin=0, vmax=2):
     colormap = plt.get_cmap('RdBu_r', 30)
     ax = plt.axes(projection=projection)
-    pcm = iris.plot.pcolormesh(cube, cmap=colormap, vmin=0, vmax=2)
+    pcm = iris.plot.pcolormesh(cube, cmap=colormap, vmin=vmin, vmax=vmax)
 
     ax.coastlines('110m')
     ax.gridlines()
@@ -165,7 +162,8 @@ def plot_cubelist_ratio_maps(cubelist, filename, scenario, modelname, quantile):
             final_year = year + 5
 
             projection = cartopy.crs.AzimuthalEquidistant(central_latitude=90)
-            plot_ratio_cube(time_cube, scenario, modelname, quantile, start_year, final_year, 'historical', 1851, 1880,
+            plot_ratio_cube(time_cube, scenario, modelname, quantile, start_year, final_year, 'historical',
+                            reference_start_year, reference_final_year,
                             projection,
                             time_cube.var_name)
             plt.savefig(
@@ -193,7 +191,7 @@ def plot_cubelist_diff_maps(cubelist, filename, scenario, modelname, quantile):
             diff_rel_es_key = 'diff_es_baseline'
             diff_mean_key = 'diff_mean'
             if (time_cube.var_name == diff_es_key):
-                vmax = 250
+                vmax = 150
             if (time_cube.var_name == diff_freq_key):
                 if (quantile == 99):
 
@@ -208,9 +206,37 @@ def plot_cubelist_diff_maps(cubelist, filename, scenario, modelname, quantile):
 
             vmin = -vmax
 
-            plot_difference_cube(time_cube, scenario, modelname, quantile, start_year, final_year, 'historical', 1851,
-                                 1880, projection,
+            plot_difference_cube(time_cube, scenario, modelname, quantile, start_year, final_year, 'historical',
+                                 reference_start_year,
+                                 reference_final_year, projection,
                                  vmin, vmax, time_cube.var_name)
+            plt.savefig(
+                filename + "_" + scenario + "_" + str(start_year) + "_" + str(final_year) + "_" + str(
+                    time_cube.var_name) + '_' + str(quantile) + '.png',
+                dpi=300, bbox_inches='tight')
+            plt.show()
+            plt.close()
+
+
+def plot_contribution_maps(cubelist, filename, scenario, modelname, quantile):
+    for i_cube in cubelist:
+        scenario_year_coord = i_cube.coord('scenario_year')
+        for i_timepoint in scenario_year_coord.cells():
+            constraint = iris.Constraint(scenario_year=i_timepoint)
+
+            year = i_timepoint[0].year
+            time_cube = i_cube.extract(constraint)
+            start_year = year - 4
+            final_year = year + 5
+
+            projection = cartopy.crs.AzimuthalEquidistant(central_latitude=90)
+            vmax = 1
+
+            vmin = 0
+            plot_ratio_cube(time_cube, scenario, modelname, quantile, start_year, final_year, 'historical',
+                            reference_start_year,
+                            reference_final_year, projection,
+                            time_cube.var_name, vmin=vmin, vmax=vmax)
             plt.savefig(
                 filename + "_" + scenario + "_" + str(start_year) + "_" + str(final_year) + "_" + str(
                     time_cube.var_name) + '_' + str(quantile) + '.png',
@@ -250,7 +276,8 @@ def plot_cubelist_average_group(ylims, cubelist, filename, var_names, modelname,
             average = i_cube.collapsed(('latitude', 'longitude'), iris.analysis.MEAN, weights=area_weights)
             iplt.plot(average, linestyle='solid', lw='0.35', label=i_cube.var_name, )
     plt.title(modelname + " percentile: " + str(
-        quantile) + '\n  ratios to baseline (hist 1851-1880): ' + scenario + " for " + areaname)
+        quantile) + '\n' + scenario + " for " + areaname + ' ratios to baseline: ' + str(
+        reference_start_year) + ' to ' + str(reference_final_year))
     plt.axhline(y=1, ls='dotted', lw=0.25, c='k')
     plt.legend()
     plt.savefig(filename + '_' + scenario + '_' + str(quantile) + '.png', dpi=300, bbox_inches='tight')
@@ -259,22 +286,32 @@ def plot_cubelist_average_group(ylims, cubelist, filename, var_names, modelname,
     plt.close()
 
 
-def plot_quantile_baseline_development(ylims, modelname, filelist, arealist, areanames, scenario, quantile
-                                       , reference_scenario, reference_start_year,
-                                       reference_final_year, maps=True):
+def import_unify(file, cubelists, data_to_plot):
+    # # define ocean mask
+    # ocean_shapefile = '/p/tmp/quante/ExtremeEventEvaluation/ne_110m_ocean/ne_110m_ocean.shp'
+    #
+    # reader = cartopy.io.shapereader.Reader(ocean_shapefile)
+    # oceans = reader.geometries()
+
+    cubelists[file] = concatenate_cube_dict(data_to_plot[file], maskpath)
+    extended_list = iris.cube.CubeList()
+    for i_cube in cubelists[file]:
+        coord = i_cube.coord('scenario_year')
+        coord.convert_units(cf_units.Unit('days since 1850-01-01 00:00:00', calendar='gregorian'))
+        i_cube = iris.util.new_axis(i_cube, scalar_coord=coord)
+        print(i_cube)
+        extended_list.append(i_cube)
+    extended_list = extended_list.concatenate()
+
+    unify_time_units(extended_list)
+    return extended_list
+
+
+def plot_quantile_baseline_development(ylims, modelname, filelist, arealist, areanames, scenario
+                                       , maps=True):
     label_frequency = 'days with daily snowfall > baseline'
-    label_frequency_diff = 'difference of ' + label_frequency
     label_es = 'expected excess snowfall > baseline (mm)'
     label_es_diff = 'difference of ' + label_es
-
-    label_es_rel_diff = label_es_diff + '\n normed to expected number of events'
-
-    label_es_diff_relative = 'baseline relative ' + label_es_diff
-
-    label_quantile_ratio = 'ratio of percentile / baseline percentile'
-    label_es_ratio = 'ratio of expected extreme snowfall (EES) / baseline EES'
-
-    label_mean_ratio = 'ratio of mean daily snowfall / baseline '
 
     data_to_plot = {}
     for i_file in filelist:
@@ -283,9 +320,6 @@ def plot_quantile_baseline_development(ylims, modelname, filelist, arealist, are
 
     quantile = (list(data_to_plot[filelist[0]].keys())[1][0])
 
-    diff_freq_key = 'diff_frequency'
-    diff_es_key = 'diff_es'
-    diff_rel_es_key = 'diff_es_baseline'
     frequency_ratio_key = 'frequency_ratio'
     quantile_ratio_key = 'percentile_ratio'
     es_ratio_key = 'es_ratio'
@@ -294,28 +328,14 @@ def plot_quantile_baseline_development(ylims, modelname, filelist, arealist, are
     # prepare time series of interesting phenomenoms by concatening all cubes:
     cubelists = {}
     all_files = iris.cube.CubeList()
-    all_files_concatenated = iris.cube.CubeList()
 
-    for i_file in filelist:
+    num_cores = multiprocessing.cpu_count()
 
-        # define ocean mask
-        ocean_shapefile = '/p/tmp/quante/ExtremeEventEvaluation/ne_110m_ocean/ne_110m_ocean.shp'
+    results_cache = (Parallel(n_jobs=num_cores)(
+        (delayed(import_unify)(i_file, cubelists, data_to_plot) for i_file in filelist)))
 
-        reader = cartopy.io.shapereader.Reader(ocean_shapefile)
-        oceans = reader.geometries()
-
-        cubelists[i_file] = concatenate_cube_dict(data_to_plot[i_file], oceans)
-        extended_list = iris.cube.CubeList()
-        for i_cube in cubelists[i_file]:
-            coord = i_cube.coord('scenario_year')
-            coord.convert_units(cf_units.Unit('days since 1850-01-01 00:00:00', calendar='gregorian'))
-            i_cube = iris.util.new_axis(i_cube, scalar_coord=coord)
-
-            extended_list.append(i_cube)
-        extended_list = extended_list.concatenate()
-
-        unify_time_units(extended_list)
-        for i_cube in extended_list:
+    for i_extended_list in results_cache:
+        for i_cube in i_extended_list:
             all_files.append(i_cube)
 
     all_files_concatenated = all_files.concatenate()
@@ -339,6 +359,9 @@ def plot_quantile_baseline_development(ylims, modelname, filelist, arealist, are
     if maps:
         plot_cubelist_ratio_maps(all_files_concatenated[4:8], 'full_NH_ratios', scenario, modelname, quantile)
         plot_cubelist_diff_maps(all_files_concatenated[0:4], 'full_NH_differences', scenario, modelname, quantile)
+    model_contribution = False
+    if model_contribution:
+        plot_contribution_maps(all_files_concatenated[8:28], 'model_contributions', scenario, modelname, quantile)
 
 
 #
@@ -374,6 +397,7 @@ areanames = settings['areanames']
 quantiles = settings['quantiles']
 modelname = settings['modelname']
 ylims = settings['ylims']
+maskpath = settings['maskpath']
 # set outputpath for plots etc
 for i_quantile in quantiles:
     date = datetime.now()
@@ -386,10 +410,10 @@ for i_quantile in quantiles:
         timeperiod_length = 10
         reference_scenario = 'historical'
         reference_start_year = 1851
-        reference_final_year = 1880
+        reference_final_year = 1920
 
         plot_quantile_baseline_development(ylims, modelname, filelist, arealist, areanames, i_scenario, i_quantile,
                                            reference_scenario, reference_start_year,
-                                           reference_final_year, maps=False)
+                                           reference_final_year, maps=True)
         os.chdir("..")
     os.chdir("..")

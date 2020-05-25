@@ -18,19 +18,22 @@ from ruamel.yaml import ruamel
 from tqdm import tqdm
 
 
-def filepath_generator(basepath, scenario, model):
-    return basepath + '/' + scenario + '/output/data_' + model + '.yml'
+# function to generate path to each individual model data
 
 
-# functions to filter for specific variables, add seasons etc
-
-def filter_cube(cube, variablename):
-    return cube.extract(variablename)
+def filepath_generator(path, scenario, model):
+    return path + '/' + scenario + '/output/data_' + model + '.yml'
 
 
+# help functions to filter for specific variables, add seasons etc
+
+def filter_cube(cube, variable):
+    return cube.extract(variable)
+
+
+# restrict on latitudes
 def latitude_constraint(latitude, cube):
-    # restrict on latitudes above northern tropic
-    latitudeConstraint = iris.Constraint(latitude=lambda v: latitude <= v)
+    latitudeConstraint: iris.Constraint = iris.Constraint(latitude=lambda v: latitude <= v)
     return cube.extract(latitudeConstraint)
 
 
@@ -62,9 +65,9 @@ def filter_season(cube, season):
 def prepare_season_stats(cubedict, season):
     keys = cubedict.keys()
     season_dict = {}
-    for i_key in keys:
-        season_cube = filter_season(cubedict[i_key], season)
-        season_dict[i_key] = season_cube
+    for iterator_key in keys:
+        season_cube = filter_season(cubedict[iterator_key], season)
+        season_dict[iterator_key] = season_cube
     return season_dict
 
 
@@ -84,18 +87,19 @@ def generate_quantile_exceedance_development(cubelist, baselinequantiles, quanti
     results = {}
     cuberesults = {}
     number_of_cubes = len(cubelist)
-    for i_key in cubelist.keys():
+    number_of_timepoints = 0
+    for iterator_key in cubelist.keys():
         # calculate some metrics per cube from cubelist
         data = {}
-        cube = cubelist[i_key]
+        cube = cubelist[iterator_key]
         data_timeperiod = extract_dates(cube, startyear, finalyear)
+        number_of_timepoints = data_timeperiod.data.shape[0]
         for i_quantile in quantiles:
-            number_of_timepoints = data_timeperiod.data.shape[0]
-            print('timepoints for model: ' + str(i_key) + " " + str(number_of_timepoints))
+            print('timepoints for model: ' + str(iterator_key) + " " + str(number_of_timepoints))
             # calculate mean for comparison to quantile development
             mean_data = data_timeperiod.collapsed('time', iris.analysis.MEAN)
 
-            mean_data.var_name = ('mean_daily_snowfall')
+            mean_data.var_name = 'mean_daily_snowfall'
             # calculate exceedance of percentiles for each gridcell to use as thresholds:
             # N.B. baselinequantile cubes to be submitted as dictionary of quantile values
 
@@ -121,13 +125,13 @@ def generate_quantile_exceedance_development(cubelist, baselinequantiles, quanti
             data['number_exceedances', i_quantile] = number_exceedances
             data['sum_exceedance', i_quantile] = sum_exceedances
             data['mean'] = mean_data
-        cuberesults[i_key] = data
+        cuberesults[iterator_key] = data
     # sum up results from separate model cubes into a single cube
     keys = list(cubelist.keys())
-    for i_key in cuberesults[keys[0]].keys():
-        results[i_key] = cuberesults[keys[0]][i_key]
+    for iterator_key in cuberesults[keys[0]].keys():
+        results[iterator_key] = cuberesults[keys[0]][iterator_key]
         for i_cube in range(1, number_of_cubes):
-            results[i_key] = results[i_key] + cuberesults[keys[i_cube]][i_key]
+            results[iterator_key] = results[iterator_key] + cuberesults[keys[i_cube]][iterator_key]
 
     # adjust average measures:
     results['mean'] = results['mean'] / number_of_cubes
@@ -138,12 +142,22 @@ def generate_quantile_exceedance_development(cubelist, baselinequantiles, quanti
         results['mean_exceedance', i_quantile] = results['sum_exceedance', i_quantile] / results[
             'number_exceedances', i_quantile]
         results['mean_exceedance', i_quantile].var_name = 'mean_exceedance_' + str(i_quantile) + 'percentile'
-        # to check how uch changing event frequency influences expected snowfall, calculate "mean" based on expected number of events
+        # to check how much changing event frequency influences expected snowfall,
+        # calculate "mean" based on expected number of events
         expected_exceedances = number_of_timepoints * (100 - i_quantile) / 100 * number_of_cubes
-        results['baseline_relative_mean_exceedance', i_quantile] = results[
-                                                                       'sum_exceedance', i_quantile] / expected_exceedances
-        results['baseline_relative_mean_exceedance', i_quantile].var_name = 'baseline_normed_mean_exceedance_' + str(
-            i_quantile) + 'percentile'
+        results['baseline_relative_mean_exceedance', i_quantile] \
+            = results['sum_exceedance', i_quantile] / expected_exceedances
+        results['baseline_relative_mean_exceedance', i_quantile].var_name \
+            = 'baseline_normed_mean_exceedance_' + str(i_quantile) + 'percentile'
+        # calculate relative contribuition of each model to exceedance count:
+        for iterator_model in cubelist.keys():
+            results['exceedance_number_contribuition', i_quantile, iterator_model] = cuberesults[iterator_model][
+                                                                                         'number_exceedances', i_quantile] / \
+                                                                                     results[
+                                                                                         'number_exceedances', i_quantile]
+            results['exceedance_mean_contribuition', i_quantile, iterator_model] = cuberesults[iterator_model][
+                                                                                       'sum_exceedance', i_quantile] / \
+                                                                                   results['sum_exceedance', i_quantile]
     return results
 
 
@@ -151,15 +165,11 @@ def calculate_quantile_exceedance_measure(historical_cubelist, ssp_cubelist, ssp
                                           quantiles,
                                           number_of_years_to_compare, number_of_timeperiods, historical_start,
                                           ssp_start, historical=True, rolling_window=True):
-    historical_start_list = []
+    historical_start_list = [historical_start]
 
-    historical_start_list.append(historical_start)
+    ssp_start_list = [ssp_start]
 
-    ssp_start_list = []
-
-    ssp_start_list.append(ssp_start)
-
-    if (rolling_window):
+    if rolling_window:
         total_timeperiod = number_of_years_to_compare * number_of_timeperiods
 
         historical_final_start_year = historical_start + total_timeperiod - number_of_years_to_compare
@@ -175,36 +185,36 @@ def calculate_quantile_exceedance_measure(historical_cubelist, ssp_cubelist, ssp
             historical_start_list.append(historical_start_list[index - 1] + number_of_years_to_compare)
 
             ssp_start_list.append(ssp_start_list[index - 1] + number_of_years_to_compare)
-    print(ssp_start_list)
 
-    num_cores = int(multiprocessing.cpu_count() / 2)
+    num_cores = multiprocessing.cpu_count()
     historical_starts = tqdm(historical_start_list)
     data = {}
 
-    if (historical):
+    if historical:
+        # multi - processing for different start years
         results_cache = (Parallel(n_jobs=num_cores)(
-            (delayed(percentile_dict_entry)(i_start, "historical", data, historical_cubelist, baseline_quantiles,
+            (delayed(percentile_dict_entry)(i_start, "historical", historical_cubelist, baseline_quantiles,
                                             quantiles, number_of_years_to_compare) for i_start in historical_starts)))
         for i_result in results_cache:
             data[i_result[0]] = i_result[1]
 
     ssp_starts = tqdm(ssp_start_list)
-
+    # multi - processing for different start years
     results_cache = (Parallel(n_jobs=num_cores)(
-        (delayed(percentile_dict_entry)(i_start, ssp_scenario, data, ssp_cubelist, baseline_quantiles, quantiles,
+        (delayed(percentile_dict_entry)(i_start, ssp_scenario, ssp_cubelist, baseline_quantiles, quantiles,
                                         number_of_years_to_compare) for i_start in ssp_starts)))
     for i_result in results_cache:
         data[i_result[0]] = i_result[1]
     return data
 
 
-def percentile_dict_entry(i_historical_start, key, dictionary, cubelist, baseline_percentiles, percentiles,
+def percentile_dict_entry(i_historical_start, key, cubelist, baseline_percentiles, percentiles_to_calculate,
                           timeperiod_length):
     i_historical_end = i_historical_start + timeperiod_length - 1
     result = generate_quantile_exceedance_development(
-        cubelist, baseline_percentiles, percentiles, i_historical_start, i_historical_end)
+        cubelist, baseline_percentiles, percentiles_to_calculate, i_historical_start, i_historical_end)
 
-    return ((key, i_historical_start, i_historical_end), result)
+    return (key, i_historical_start, i_historical_end), result
 
 
 # function to restrict cubes on bounding box
@@ -226,8 +236,8 @@ def country_cubelist(cubelist, country_box):
 def country_filter(cubedict, country_box):
     dict_keys = cubedict.keys()
     country_cubes = {}
-    for i_key in dict_keys:
-        country_cubes[i_key] = country_cubelist(cubedict[i_key], country_box)
+    for iterator_key in dict_keys:
+        country_cubes[iterator_key] = country_cubelist(cubedict[iterator_key], country_box)
     return country_cubes
 
 
@@ -261,7 +271,7 @@ def percentile_from_cubedict(cubedict, percentile, startyear, finalyear):
 
 
 def comparison_threshold(modellist, basic_cubelist, ssp_scenario, number_of_decades, area_box, start_historical,
-                         start_ssp, percentiles,
+                         start_ssp, percentiles_to_calculate,
                          historical=True, rolling_window=True):
     # filter data for country box:
     area_data = country_filter(basic_cubelist, area_box)
@@ -271,44 +281,34 @@ def comparison_threshold(modellist, basic_cubelist, ssp_scenario, number_of_deca
     historical_ensemble_cubelist = {}
     ssp_ensemble_cubelist = {}
     baseline_ensemble_cubelist = {}
-    for i_model in modellist:
-        historical_ensemble_cubelist[i_model] = (area_data[i_model, 'historical'])
-        ssp_ensemble_cubelist[i_model] = (area_data[i_model, ssp_scenario])
-        baseline_ensemble_cubelist[i_model] = (area_data[i_model, 'historical'])
+    for iterator_model in modellist:
+        historical_ensemble_cubelist[iterator_model] = (area_data[iterator_model, 'historical'])
+        ssp_ensemble_cubelist[iterator_model] = (area_data[iterator_model, ssp_scenario])
+        baseline_ensemble_cubelist[iterator_model] = (area_data[iterator_model, 'historical'])
 
     baseline_percentiles = {}
-    for i_percentile in percentiles:
-        baseline_percentiles[i_percentile] = percentile_from_cubedict(baseline_ensemble_cubelist, i_percentile, 1851,
-                                                                      1880)
+    for i_percentile in percentiles_to_calculate:
+        baseline_percentiles[i_percentile] = percentile_from_cubedict(baseline_ensemble_cubelist, i_percentile,
+                                                                      baseline_start,
+                                                                      baseline_end)
     return calculate_quantile_exceedance_measure(historical_ensemble_cubelist, ssp_ensemble_cubelist, ssp_scenario,
-                                                 baseline_percentiles, percentiles,
+                                                 baseline_percentiles, percentiles_to_calculate,
                                                  10, number_of_decades, start_historical, start_ssp,
                                                  historical=historical, rolling_window=rolling_window)
 
 
-# what are your inputs, and what operation do you want to
-# perform on each input. For example...
-inputs = range(10)
-
-
-def processInput(i):
-    return i * i
-
-
-def multi_region_threshold_analysis_preindustrial(cubelist, modellist, arealist, ssp_scenario, start_ssp,
+def multi_region_threshold_analysis_preindustrial(cubelist, modellist, areas_to_analyse, ssp_scenario, start_ssp,
                                                   start_historical,
-                                                  number_of_decades, percentiles,
+                                                  number_of_decades, percentiles_to_calculate,
                                                   historical=True, rolling_window=True):
-    num_cores = multiprocessing.cpu_count()
-
-    for i_area in tqdm(arealist.keys()):
-        results = {}
-        results['ensemble', 'preindustrial', i_area] = comparison_threshold(modellist, cubelist, ssp_scenario,
-                                                                            number_of_decades,
-                                                                            arealist[i_area], start_historical,
-                                                                            start_ssp, percentiles,
-                                                                            historical=historical,
-                                                                            rolling_window=rolling_window)
+    for i_area in tqdm(areas_to_analyse.keys()):
+        results = {('ensemble', 'preindustrial', i_area): comparison_threshold(modellist, cubelist, ssp_scenario,
+                                                                               number_of_decades,
+                                                                               areas_to_analyse[i_area],
+                                                                               start_historical,
+                                                                               start_ssp, percentiles_to_calculate,
+                                                                               historical=historical,
+                                                                               rolling_window=rolling_window)}
         filename = str('ensemble') + '_' + str(i_area) + '_preindustrial_baseline_hist_from_' + str(
             start_historical) + "_" + ssp_scenario + '_from_' + str(
             start_ssp) + '_' + str(number_of_decades) + "_"
@@ -317,9 +317,10 @@ def multi_region_threshold_analysis_preindustrial(cubelist, modellist, arealist,
         pickle.dump(results, file)
 
 
+# actual script, starting with settingsparser
+
 parser = argparse.ArgumentParser(
     description="Calculate some analysis metrics regarding extreme snowfall on specified data")
-
 
 # path to *.yml file with settings to be used
 parser.add_argument(
@@ -349,6 +350,8 @@ variablename = settings['variablename']
 outputdir = settings['outputdir']
 scenarios = settings['scenarios']
 percentiles = settings['percentiles']
+baseline_start = int(settings['baseline_start'])
+baseline_end = int(settings['baseline_end'])
 data_dictionary = {}
 
 for i_model in models:
@@ -369,23 +372,21 @@ for i_key in data_keys:
             print(exc)
 # load data
 
-cubelist = {}
+cubes = {}
 # restrict latitudes
 for i_key in data_keys:
-    cubelist[i_key] = (latitude_constraint(30, iris.load(filepaths[i_key], variablename)))
+    cubes[i_key] = (latitude_constraint(30, iris.load(filepaths[i_key], variablename)))
 
 # TODO: flexible extension of historical data with respective ssp, but should not make a big difference
 for i_model in models:
-    unify_current_decade(cubelist, i_model, 'ssp585')
+    unify_current_decade(cubes, i_model, 'ssp585')
 
 # ignore warnings
 warnings.simplefilter("ignore")
 
 os.chdir(outputdir)
 
-# define boxes for northern america and northern europe:
-
-
+# define 4 boxes for northern hemisphere to reduce memory requirement of each run
 
 lat_lower_bound = 30
 lat_upper_bound = 90
@@ -393,17 +394,21 @@ northern_hemisphere_first_quarter = (0, lat_lower_bound, 90, lat_upper_bound)
 northern_hemisphere_second_quarter = (90, lat_lower_bound, 180, lat_upper_bound)
 northern_hemisphere_third_quarter = (-180, lat_lower_bound, -90, lat_upper_bound)
 northern_hemisphere_fourth_quarter = (-90, lat_lower_bound, 0, lat_upper_bound)
-arealist = {}
 
-arealist['NORTHERN_HEMISPHERE_1'] = northern_hemisphere_first_quarter
-arealist['NORTHERN_HEMISPHERE_2'] = northern_hemisphere_second_quarter
-arealist['NORTHERN_HEMISPHERE_3'] = northern_hemisphere_third_quarter
-arealist['NORTHERN_HEMISPHERE_4'] = northern_hemisphere_fourth_quarter
-# generate reference results:
-# multi_region_threshold_analysis_preindustrial(cubelist, models, arealist, 'historical', 1851, 1851, 3, percentiles,historical=False)
-# for i_scenario in tqdm(scenarios):
-#   multi_region_threshold_analysis_preindustrial(cubelist,models, arealist, i_scenario, 2021, 1851, 8,percentiles,historical=False)
+arealist = {'NORTHERN_HEMISPHERE_1': northern_hemisphere_first_quarter,
+            'NORTHERN_HEMISPHERE_2': northern_hemisphere_second_quarter,
+            'NORTHERN_HEMISPHERE_3': northern_hemisphere_third_quarter,
+            'NORTHERN_HEMISPHERE_4': northern_hemisphere_fourth_quarter}
 
+# generate reference results for baseline:
+baseline_decades = int((baseline_end - baseline_start + 1) / 10)
+multi_region_threshold_analysis_preindustrial(cubes, models, arealist, 'historical', baseline_start, baseline_start,
+                                              baseline_decades, percentiles, historical=False)
 
-# full historical analysis for comparison
-multi_region_threshold_analysis_preindustrial(cubelist, models, arealist, 'historical', 1931, 1851, 9, percentiles)
+# generate ssp data (without historical leg, since done in next step
+for i_scenario in tqdm(scenarios):
+    multi_region_threshold_analysis_preindustrial(cubes, models, arealist, i_scenario, 2021, 1851, 8, percentiles,
+                                                  historical=False)
+
+# generate full historical data for comparison
+multi_region_threshold_analysis_preindustrial(cubes, models, arealist, 'historical', 1931, 1851, 9, percentiles)
