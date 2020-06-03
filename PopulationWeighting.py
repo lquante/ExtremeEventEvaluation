@@ -18,8 +18,7 @@ from tqdm import tqdm
 parser = argparse.ArgumentParser(description="Calculate some analysis metrics on specified data files")
 
 # settings file import
-# argument parser definition
-parser = argparse.ArgumentParser(description="Generate a movie on the time dimension of Geo-referenced netcdf file(s)")
+
 # path to *.yml file with settings to be used
 parser.add_argument(
     "--settings"
