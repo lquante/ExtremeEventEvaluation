@@ -241,23 +241,26 @@ def country_filter(cubedict, country_box):
     return country_cubes
 
 
-def extract_dates(cube, startyear, finalyear):
+def extract_dates(cube, startyear, finalyear, year=False):
     # filter for certain years (inclusive for start and final year)
     # add auxilary year coordinate
-
+    try:
+        cube.remove_coord('year')
+    except iris.exceptions.CoordinateNotFoundError:
+        pass
     iris.coord_categorisation.add_year(cube, 'time', name='year')
     year_constraint = iris.Constraint(year=lambda t: startyear <= t <= finalyear)
     limited_cube = cube.extract(year_constraint)
-    cube.remove_coord('year')
     return limited_cube
 
 
-def percentile_from_cubedict(cubedict, percentile, startyear, finalyear):
+def percentile_from_cubedict(cubedict, percentile, startyear, finalyear, year=False):
     # extract data from cubes and merge
     keys = list(cubedict.keys())
-    dataarray = extract_dates(cubedict[keys[0]], startyear, finalyear).data
+    dataarray = extract_dates(cubedict[keys[0]], startyear, finalyear, year=year).data
     for i in range(1, len(cubedict)):
-        dataarray = np.concatenate((dataarray, extract_dates(cubedict[keys[i]], startyear, finalyear).data), axis=0)
+        dataarray = np.concatenate((dataarray, extract_dates(cubedict[keys[i]], startyear, finalyear, year=year).data),
+                                   axis=0)
     # calculate percentile
     percentile_data = np.percentile(dataarray, percentile, axis=0)
 
@@ -334,38 +337,36 @@ def load_from_nc(filedict, variablename, latitude_lower_bound):
     return loaded_cubes
 
 
-def generate_temperature_snow_development(cubelist_temperature, cubelist_snow, baseline_temperature, baseline_snow,
+def generate_temperature_snow_development(cubelist_temperature, cubelist_snow, cubelist_precipitation,
                                           threshold_temperatures, startyear, finalyear):
     results = {}
     cuberesults = {}
     number_of_cubes = len(cubelist_temperature)
-    number_of_timepoints = 0
-    print(threshold_temperatures)
+    dict_snow_thresholded = {}
 
     for model_key in cubelist_temperature.keys():
         # calculate some metrics per cube from cubelist
         data = {}
         temperature_cube = cubelist_temperature[model_key]
-
         snow_cube = cubelist_snow[model_key]
-        temperature_timeperiod = extract_dates(temperature_cube, startyear, finalyear)
+        precipitation_cube = cubelist_precipitation[model_key]
 
+        temperature_timeperiod = extract_dates(temperature_cube, startyear, finalyear)
         snow_timeperiod = extract_dates(snow_cube, startyear, finalyear)
+        precipitation_timeperiod = extract_dates(precipitation_cube, startyear, finalyear)
+
         number_of_timepoints_temp = temperature_timeperiod.data.shape[0]
-        number_of_timepoints_snow = snow_timeperiod.data.shape[0]
-        print('temperature timepoints for model: ' + str(model_key) + " " + str(number_of_timepoints_temp))
-        print('snow timepoints for model: ' + str(model_key) + " " + str(number_of_timepoints_snow))
+        print('timepoints for model: ' + str(model_key) + " " + str(number_of_timepoints_temp))
 
         # calculate indicator of threshold temperature:
 
         temperature_data = temperature_timeperiod.data
 
         for i_temperature in threshold_temperatures:
-            print(i_temperature)
+
             threshold_temperature = float(i_temperature)
 
             temperature_indicator_data = np.int8(temperature_data <= threshold_temperature)
-            print(np.max(temperature_indicator_data))
             temperature_below_threshold = temperature_timeperiod.copy(data=temperature_indicator_data)
             temperature_below_threshold.var_name = (
                     'indicator_temperature_below_' + str(threshold_temperature) + 'degree_K')
@@ -378,42 +379,51 @@ def generate_temperature_snow_development(cubelist_temperature, cubelist_snow, b
             snow_below_temperature = snow_timeperiod * temperature_below_threshold
             snow_below_temperature.var_name = ('prsn_below_' + str(threshold_temperature) + 'degree_K')
 
+            dict_snow_thresholded[model_key] = snow_below_temperature
             mean_snow_below_temperature = snow_below_temperature.collapsed('time', iris.analysis.MEAN)
             mean_snow_below_temperature.var_name = ('mean_prsn_below_' + str(threshold_temperature) + 'degree_K')
             mean_snow_below_temperature.remove_coord('time')
 
             data['temperature_days', threshold_temperature] = temperature_days
-            # data['snow_below_temperature', threshold_temperature] = snow_below_temperature
+            data['snow_below_temperature', threshold_temperature] = snow_below_temperature
             data['mean_snow_below_temperature', threshold_temperature] = mean_snow_below_temperature
-            cuberesults[model_key] = data
 
+        # get precipitation stats for comparison
+        mean_precipitation = precipitation_timeperiod.collapsed('time', iris.analysis.MEAN)
+        mean_precipitation.var_name = ('mean_pr')
+        data['mean_precipitation'] = mean_precipitation
+        cuberesults[model_key] = data
     # sum up results from separate model cubes into a single cube
     model_keys = list(cubelist_temperature.keys())
 
     for data_key in cuberesults[model_keys[0]].keys():
-        results[data_key] = cuberesults[model_keys[0]][data_key]
+        results_data = cuberesults[model_keys[0]][data_key].data
         for i_model in range(1, number_of_cubes):
-            results[data_key] = results[data_key] + cuberesults[model_keys[i_model]][data_key]
+            results_data = results_data + cuberesults[model_keys[i_model]][data_key].data
+        # adjust to average measures:
+        results_data = results_data / number_of_cubes
+        results[data_key] = cuberesults[model_keys[0]][data_key].copy(data=results_data)
 
-    # adjust to average measures:
     for i_temperature in threshold_temperatures:
-        results['mean_snow_below_temperature', i_temperature] = results[
-                                                                    'mean_snow_below_temperature', i_temperature] / number_of_cubes
-        results['temperature_days', i_temperature] = results['temperature_days', i_temperature] / number_of_cubes
-        print(results['mean_snow_below_temperature', i_temperature].collapsed(('latitude', 'longitude'),
-                                                                              iris.analysis.MAX).data)
-        print(results['temperature_days', i_temperature].collapsed(('latitude', 'longitude'),
-                                                                   iris.analysis.MAX).data)
+        # NB: just using percentiles in a crude way directly from settingsfile, to get the same as used for EEI of snow etc.
+        for i_percentile in percentiles:
+            # N-B: only fit for 1 temperature a time ATM, but anyways to speed up computation temperatures should be run seperatly
+            results['percentile_snow_below_temperature', i_temperature, i_percentile] = percentile_from_cubedict(
+                dict_snow_thresholded, i_percentile, startyear, finalyear, year=True)
+            results['precipitation_percentile', i_percentile] = percentile_from_cubedict(cubelist_precipitation,
+                                                                                         i_percentile, startyear,
+                                                                                         finalyear)
     return results
 
 
 # temperature analysis function
 def calculate_snowfall_below_temperature_measures(historical_ensemble_cubelist_temperature,
                                                   historical_ensemble_cubelist_snow,
+                                                  historical_ensemble_cubelist_precipitation,
                                                   ssp_ensemble_cubelist_temperature, ssp_ensemble_cubelist_snow,
+                                                  ssp_ensemble_cubelist_precipitation,
                                                   scenario,
-                                                  baseline_ensemble_cubelist_temperature,
-                                                  baseline_ensemble_cubelist_snow, threshold_temperatures,
+                                                  threshold_temperatures,
                                                   number_of_years_to_compare,
                                                   number_of_timeperiods, historical_start, scenario_start, historical,
                                                   rolling_window):
@@ -444,8 +454,8 @@ def calculate_snowfall_below_temperature_measures(historical_ensemble_cubelist_t
         # multi - processing for different start years
         results_cache = (Parallel(n_jobs=num_cores)(
             (delayed(temperature_dict_entry)(i_start, "historical", historical_ensemble_cubelist_temperature,
-                                             historical_ensemble_cubelist_snow, baseline_ensemble_cubelist_temperature,
-                                             baseline_ensemble_cubelist_snow,
+                                             historical_ensemble_cubelist_snow,
+                                             historical_ensemble_cubelist_precipitation,
                                              threshold_temperatures, number_of_years_to_compare) for i_start in
              historical_starts)))
         for i_result in results_cache:
@@ -454,14 +464,17 @@ def calculate_snowfall_below_temperature_measures(historical_ensemble_cubelist_t
     scenario_starts = tqdm(scenario_start_list)
     # results_cache = []
     # for i_start in scenario_starts:
-    #     results_cache.append(temperature_dict_entry(i_start, scenario, ssp_ensemble_cubelist_temperature, ssp_ensemble_cubelist_snow,
-    #                             baseline_ensemble_cubelist_temperature, baseline_ensemble_cubelist_snow,
-    #                             threshold_temperature,number_of_years_to_compare))
+    #     results_cache.append(temperature_dict_entry(i_start, scenario, ssp_ensemble_cubelist_temperature,
+    #                                       ssp_ensemble_cubelist_snow,
+    #                                       ssp_ensemble_cubelist_precipitation,
+    #                                       threshold_temperatures,
+    #                                       number_of_years_to_compare))
     # multi - processing for different start years
+
     results_cache = (Parallel(n_jobs=num_cores)(
         (delayed(temperature_dict_entry)(i_start, scenario, ssp_ensemble_cubelist_temperature,
                                          ssp_ensemble_cubelist_snow,
-                                         baseline_ensemble_cubelist_temperature, baseline_ensemble_cubelist_snow,
+                                         ssp_ensemble_cubelist_precipitation,
                                          threshold_temperatures,
                                          number_of_years_to_compare) for i_start in scenario_starts)))
     for i_result in results_cache:
@@ -469,18 +482,18 @@ def calculate_snowfall_below_temperature_measures(historical_ensemble_cubelist_t
     return data
 
 
-def temperature_dict_entry(i_historical_start, key, cubelist_temperature, cubelist_snow, baseline_temperature,
-                           baseline_snow, threshold_temperatures,
+def temperature_dict_entry(start, key, cubelist_temperature, cubelist_snow, cubelist_precipitation,
+                           threshold_temperatures,
                            timeperiod_length):
-    i_historical_end = i_historical_start + timeperiod_length - 1
+    end = start + timeperiod_length - 1
     result = generate_temperature_snow_development(
-        cubelist_temperature, cubelist_snow, baseline_temperature, baseline_snow, threshold_temperatures,
-        i_historical_start, i_historical_end)
+        cubelist_temperature, cubelist_snow, cubelist_precipitation, threshold_temperatures,
+        start, end)
 
-    return (key, i_historical_start, i_historical_end), result
+    return (key, start, end), result
 
 
-def analyse_temperature_snow(modellist, temperature_cubes, snow_cubes, scenario, number_of_decades,
+def analyse_temperature_snow(modellist, temperature_cubes, snow_cubes, precipitation_cubes, scenario, number_of_decades,
                              area,
                              historical_start,
                              scenario_start, threshold_temperatures,
@@ -489,40 +502,47 @@ def analyse_temperature_snow(modellist, temperature_cubes, snow_cubes, scenario,
     # filter data for country box:
     area_data_temperature = country_filter(temperature_cubes, area)
     area_data_snow = country_filter(snow_cubes, area)
+    area_data_precipitation = country_filter(precipitation_cubes, area)
     # merge model cubes into ensemble cube
     historical_ensemble_cubelist_temperature = {}
     ssp_ensemble_cubelist_temperature = {}
-    baseline_ensemble_cubelist_temperature = {}
 
     historical_ensemble_cubelist_snow = {}
     ssp_ensemble_cubelist_snow = {}
-    baseline_ensemble_cubelist_snow = {}
+
+    historical_ensemble_cubelist_precipitation = {}
+    ssp_ensemble_cubelist_precipitation = {}
 
     for iterator_model in modellist:
         historical_ensemble_cubelist_temperature[iterator_model] = (area_data_temperature[iterator_model, 'historical'])
         ssp_ensemble_cubelist_temperature[iterator_model] = (area_data_temperature[iterator_model, scenario])
-        baseline_ensemble_cubelist_temperature[iterator_model] = (area_data_temperature[iterator_model, 'historical'])
 
         historical_ensemble_cubelist_snow[iterator_model] = (area_data_snow[iterator_model, 'historical'])
         ssp_ensemble_cubelist_snow[iterator_model] = (area_data_snow[iterator_model, scenario])
-        baseline_ensemble_cubelist_snow[iterator_model] = (area_data_snow[iterator_model, 'historical'])
+
+        historical_ensemble_cubelist_precipitation[iterator_model] = (
+            area_data_precipitation[iterator_model, 'historical'])
+        ssp_ensemble_cubelist_precipitation[iterator_model] = (area_data_precipitation[iterator_model, scenario])
 
     return calculate_snowfall_below_temperature_measures(historical_ensemble_cubelist_temperature,
                                                          historical_ensemble_cubelist_snow,
+                                                         historical_ensemble_cubelist_precipitation,
                                                          ssp_ensemble_cubelist_temperature, ssp_ensemble_cubelist_snow,
-                                                         scenario,
-                                                         baseline_ensemble_cubelist_temperature,
-                                                         baseline_ensemble_cubelist_snow, threshold_temperatures,
-                                                         10, number_of_decades, historical_start, scenario_start,
+                                                         ssp_ensemble_cubelist_precipitation,
+                                                         scenario
+                                                         , threshold_temperatures, 10, number_of_decades,
+                                                         historical_start, scenario_start,
                                                          historical=historical, rolling_window=rolling_window)
 
 
-def temperature_analysis(temperature_cubes, snow_cubes, modellist, areas_to_analyse, scenario, scenario_start,
+def temperature_analysis(temperature_cubes, snow_cubes, precipitation_cubes, modellist, areas_to_analyse, scenario,
+                         scenario_start,
                          historical_start, number_of_decades, threshold_temperatures, historical=True,
                          rolling_window=True):
     for i_area in tqdm(areas_to_analyse.keys()):
         results = {
             ('ensemble', 'preindustrial', i_area): analyse_temperature_snow(modellist, temperature_cubes, snow_cubes,
+                                                                            precipitation_cubes,
                                                                             scenario,
                                                                             number_of_decades,
                                                                             areas_to_analyse[i_area],
@@ -580,18 +600,19 @@ data_dictionary = {}
 # modified data import directly from isimip *.nc files
 if (temperature):
     # filelists to be given sorted by scenarios and models
-    filelist_tas = settings['files_tas']
-    filelist_prsn = settings['files_prsn']
-
+    filelist_tas = settings['files']
+    filelist_prsn = settings['files']
+    filelist_pr = settings['files']
     # load data
     tas_cubes = {}
     prsn_cubes = {}
-
+    pr_cubes = {}
     scenarios_to_be_compared = ['historical', 'ssp126', 'ssp370', 'ssp585']
     for i_scenario in scenarios_to_be_compared:
         for i_model in models:
             tas_cubes[i_model, i_scenario] = load_from_nc(filelist_tas[i_scenario][i_model], 'air_temperature', 30)
             prsn_cubes[i_model, i_scenario] = load_from_nc(filelist_prsn[i_scenario][i_model], 'snowfall_flux', 30)
+            pr_cubes[i_model, i_scenario] = load_from_nc(filelist_pr[i_scenario][i_model], 'precipitation_flux', 30)
     # for i_model in models:
     # unify_current_decade(tas_cubes, i_model, 'ssp585')
     # unify_current_decade(prsn_cubes, i_model, 'ssp585')
@@ -644,13 +665,15 @@ baseline_decades = int((baseline_end - historical_start + 1) / 10)
 
 if (temperature):
     # baseline
-    # temperature_analysis (tas_cubes,prsn_cubes,models,arealist,'historical', historical_start, historical_start,
-    # baseline_decades, threshold_temperatures, historical=False)
+    temperature_analysis(tas_cubes, prsn_cubes, pr_cubes, models, arealist, 'historical', historical_start,
+                         historical_start,
+                         baseline_decades, threshold_temperatures, historical=False)
     # for i_scenario in tqdm(scenarios):
-    #     temperature_analysis(tas_cubes, prsn_cubes, models, arealist, i_scenario, 2021, 1851, 8, threshold_temperatures,
+    #     temperature_analysis(tas_cubes, prsn_cubes,pr_cubes, models, arealist, i_scenario, 2021, 1851, 8, threshold_temperatures,
     #                                                  historical=False)
     # generate full historical data for comparison
-    temperature_analysis(tas_cubes, prsn_cubes, models, arealist, 'historical', 1931, 1851, 9, threshold_temperatures)
+    temperature_analysis(tas_cubes, prsn_cubes, pr_cubes, models, arealist, 'historical', 1931, 1851, 9,
+                         threshold_temperatures)
 
 
 else:

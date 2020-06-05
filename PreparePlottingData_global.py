@@ -327,26 +327,33 @@ def ensemble_average_temperature(temperature, models, results, ref_results, data
     ref_days_below_temperature = {}
     ref_snow_below_temperature = {}
     ref_mean_snow_below_temperature = {}
+    ref_mean_precipitation = {}
 
     data_days_below_temperature = {}
     data_snow_below_temperature = {}
     data_mean_snow_below_temperature = {}
+    data_mean_precipitation = {}
 
     days_below_temperature_key = 'temperature_days'
     mean_snow_below_temperature_key = "mean_snow_below_temperature"
     snow_below_temperature_key = "snow_below_temperature"
 
+    mean_precipitation_key = "mean_precipitation"
+
     ensemble_ref_days_below_temperature = {}
     ensemble_ref_snow_below_temperature = {}
     ensemble_ref_mean_snow_below_temperature = {}
+    ensemble_ref_mean_precipitation = {}
 
     ensemble_data_days_below_temperature = {}
     ensemble_data_snow_below_temperature = {}
     ensemble_data_mean_snow_below_temperature = {}
+    ensemble_data_mean_precipitation = {}
 
     days_below_temperature_ratio = {}
     mean_snow_below_temperature_ratio = {}
     snow_below_temperature_ratio = {}
+    mean_precipitation_ratio = {}
 
     for i_start_year in starting_years:
         start_year = i_start_year
@@ -370,6 +377,11 @@ def ensemble_average_temperature(temperature, models, results, ref_results, data
             data_mean_snow_below_temperature[i_model] = data[i_model]['quantiles'][
                 mean_snow_below_temperature_key, temperature]
 
+            ref_mean_precipitation[i_model] = reference_data[i_model]['quantiles'][
+                mean_precipitation_key]
+            data_mean_precipitation[i_model] = data[i_model]['quantiles'][
+                mean_precipitation_key]
+
             # ref_snow_below_temperature[i_model] = reference_data[i_model]['quantiles'][snow_below_temperature_key, temperature]
             # data_snow_below_temperature[i_model] = data[i_model]['quantiles'][snow_below_temperature_key, temperature]
 
@@ -386,11 +398,15 @@ def ensemble_average_temperature(temperature, models, results, ref_results, data
         # ensemble_data_snow_below_temperature [i_start_year] = ensemble_average(models,data_snow_below_temperature)
         ensemble_data_mean_snow_below_temperature[i_start_year] = ensemble_average(models,
                                                                                    data_mean_snow_below_temperature)
+        ensemble_data_mean_precipitation[i_start_year] = ensemble_average(models,
+                                                                          data_mean_precipitation)
 
         ensemble_ref_days_below_temperature[i_start_year] = ensemble_average(models, ref_days_below_temperature)
         # ensemble_ref_snow_below_temperature [i_start_year] = ensemble_average(models, ref_snow_below_temperature)
         ensemble_ref_mean_snow_below_temperature[i_start_year] = ensemble_average(models,
                                                                                   ref_mean_snow_below_temperature)
+        ensemble_ref_mean_precipitation[i_start_year] = ensemble_average(models,
+                                                                         ref_mean_precipitation)
 
         days_below_temperature_ratio[start_year] = ensemble_data_days_below_temperature[i_start_year] / \
                                                    ensemble_ref_days_below_temperature[i_start_year]
@@ -399,25 +415,28 @@ def ensemble_average_temperature(temperature, models, results, ref_results, data
                                                         ensemble_ref_mean_snow_below_temperature[i_start_year]
 
         days_below_temperature_ratio[start_year].add_aux_coord(time_coord)
-        # days_below_temperature_ratio[start_year].remove_coord( 'year')
 
-        # snow_below_temperature_ratio[start_year].add_aux_coord(time_coord)
-        # snow_below_temperature_ratio[start_year].remove_coord('year')
+        mean_precipitation_ratio[start_year] = ensemble_data_mean_precipitation[i_start_year] / \
+                                               ensemble_ref_mean_precipitation[i_start_year]
 
         mean_snow_below_temperature_ratio[start_year].add_aux_coord(time_coord)
-        # mean_snow_below_temperature_ratio[start_year].remove_coord('year')
+        mean_precipitation_ratio[start_year].add_aux_coord(time_coord)
 
         dict_to_plot[temperature, i_start_year, 'days_below_temperature_ratio'] = days_below_temperature_ratio[
             i_start_year]
-        # dict_to_plot[temperature, i_start_year, 'snow_below_temperature_ratio'] = snow_below_temperature_ratio[i_start_year]
         dict_to_plot[temperature, i_start_year, 'mean_snow_below_temperature_ratio'] = \
             mean_snow_below_temperature_ratio[i_start_year]
+        dict_to_plot[temperature, i_start_year, 'mean_precipitation_ratio'] = \
+            mean_precipitation_ratio[i_start_year]
 
         dict_to_plot[
             temperature, i_start_year, 'days_below_temperature_ratio'].var_name = 'days_below_temperature_ratio'
-        # dict_to_plot[temperature, i_start_year, 'snow_below_temperature_ratio'].var_name = 'snow_below_temperature_ratio'
+
         dict_to_plot[
             temperature, i_start_year, 'mean_snow_below_temperature_ratio'].var_name = 'mean_snow_below_temperature_ratio'
+
+        dict_to_plot[
+            temperature, i_start_year, 'mean_precipitation_ratio'].var_name = 'mean_precipitation_ratio'
 
     return dict_to_plot
 
