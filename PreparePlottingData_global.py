@@ -54,19 +54,37 @@ def quantile_collection(results, data_scenario, start_year, final_year, length_t
 
     for iterator_key in (quantile_cubelists.keys()):
         print(iterator_key)
+        print(quantile_cubelists[iterator_key][0])
         reference_cube = quantile_cubelists[iterator_key][0] - quantile_cubelists[iterator_key][0]
         if reference_cube.coords(long_name='year'):
             reference_cube.remove_coord('year')
-        for i_cube in quantile_cubelists[iterator_key]:
-            reference_cube += i_cube
-        time_coord = iris.coords.AuxCoord(start_year + data_timeperiod / 2 - 1,
-                                          long_name='year', units='1', bounds=(start_year, final_year))
-        reference_cube.add_aux_coord(time_coord)
-        quantile_cubes[iterator_key] = reference_cube
-        print(reference_cube)
+
+        if iterator_key == ('snow_below_temperature', 273.15):
+            print('daily data not supported ATM')
+        else:
+            for i_cube in quantile_cubelists[iterator_key]:
+                reference_cube += i_cube
+            time_coord = iris.coords.AuxCoord(start_year + data_timeperiod / 2 - 1,
+                                              long_name='year', units='1', bounds=(start_year, final_year))
+            reference_cube.add_aux_coord(time_coord)
+            quantile_cubes[iterator_key] = reference_cube
+            print(reference_cube)
+
+            for i_cube in quantile_cubelists[iterator_key]:
+                reference_cube += i_cube
+            time_coord = iris.coords.AuxCoord(start_year + data_timeperiod / 2 - 1,
+                                              long_name='year', units='1', bounds=(start_year, final_year))
+            if reference_cube.coords(long_name='year'):
+                reference_cube.remove_coord('year')
+            reference_cube.add_aux_coord(time_coord)
+            quantile_cubes[iterator_key] = reference_cube
+            print(reference_cube)
 
     for iterator_key in quantile_cubelists.keys():
-        quantile_cubes[iterator_key] = quantile_cubes[iterator_key] / number_of_timeperiods
+        if iterator_key == ('snow_below_temperature', 273.15):
+            print('daily data not supported ATM')
+        else:
+            quantile_cubes[iterator_key] = quantile_cubes[iterator_key] / number_of_timeperiods
 
     reference_collection = {'quantiles': quantile_cubes}
     return reference_collection
@@ -224,12 +242,11 @@ def ensemble_average_quantile_baseline(quantile_to_calculate, models, results, r
 
         diff_mean_average[i_start_year] = data_mean_average[i_start_year] - ref_mean_average[i_start_year]
         diff_mean_average[i_start_year].add_aux_coord(time_coord)
+
         quantile_average[i_start_year] = ensemble_average(models, quantile_dict)
-
-        # mask data where quantile ==0
-
         quantile_baseline_ratio[i_start_year] = quantile_average[i_start_year] / baseline_average[i_start_year]
         quantile_baseline_ratio[i_start_year].add_aux_coord(time_coord)
+
         ref_frequency_average[i_start_year] = ensemble_average(models, ref_frequency)
 
         ref_expected_snowfall_average[i_start_year] = ensemble_average(models, ref_expected_snowfall)
@@ -340,10 +357,25 @@ def ensemble_average_temperature(temperature, models, results, ref_results, data
 
     mean_precipitation_key = "mean_precipitation"
 
+    pr_percentile_key = 'precipitation_percentile'
+    percentile_to_calculate = 99.9
+
+    snow_below_percentile_key = 'percentile_snow_below_temperature'
+
     ensemble_ref_days_below_temperature = {}
     ensemble_ref_snow_below_temperature = {}
     ensemble_ref_mean_snow_below_temperature = {}
     ensemble_ref_mean_precipitation = {}
+
+    ref_pr_percentile = {}
+    data_pr_percentile = {}
+    average_ref_pr_percentile = {}
+    average_data_pr_percentile = {}
+
+    ref_snow_below_percentile = {}
+    data_snow_below_percentile = {}
+    average_ref_snow_below_percentile = {}
+    average_data_snow_below_percentile = {}
 
     ensemble_data_days_below_temperature = {}
     ensemble_data_snow_below_temperature = {}
@@ -354,6 +386,8 @@ def ensemble_average_temperature(temperature, models, results, ref_results, data
     mean_snow_below_temperature_ratio = {}
     snow_below_temperature_ratio = {}
     mean_precipitation_ratio = {}
+    pr_percentile_ratio = {}
+    snow_below_percentile_ratio = {}
 
     for i_start_year in starting_years:
         start_year = i_start_year
@@ -382,8 +416,14 @@ def ensemble_average_temperature(temperature, models, results, ref_results, data
             data_mean_precipitation[i_model] = data[i_model]['quantiles'][
                 mean_precipitation_key]
 
-            # ref_snow_below_temperature[i_model] = reference_data[i_model]['quantiles'][snow_below_temperature_key, temperature]
-            # data_snow_below_temperature[i_model] = data[i_model]['quantiles'][snow_below_temperature_key, temperature]
+            ref_pr_percentile[i_model] = reference_data[i_model]['quantiles'][
+                pr_percentile_key, percentile_to_calculate]
+            data_pr_percentile[i_model] = data[i_model]['quantiles'][pr_percentile_key, percentile_to_calculate]
+
+            ref_snow_below_percentile[i_model] = reference_data[i_model]['quantiles'][
+                snow_below_percentile_key, temperature, percentile_to_calculate]
+            data_snow_below_percentile[i_model] = reference_data[i_model]['quantiles'][
+                snow_below_percentile_key, temperature, percentile_to_calculate]
 
         # add time coordinate to identify scenario decade from which the difference stems, to prepare timeplots of development
         datetime_year = datetime(int(start_year + length_timeperiod / 2 - 1), 1, 1, 0, 0, 0, 0).toordinal()
@@ -422,21 +462,47 @@ def ensemble_average_temperature(temperature, models, results, ref_results, data
         mean_snow_below_temperature_ratio[start_year].add_aux_coord(time_coord)
         mean_precipitation_ratio[start_year].add_aux_coord(time_coord)
 
+        # percentiles of precipitation change:
+
+        average_ref_pr_percentile[i_start_year] = ensemble_average(models, ref_pr_percentile)
+        average_data_pr_percentile[i_start_year] = ensemble_average(models, data_pr_percentile)
+        pr_percentile_ratio[i_start_year] = average_data_pr_percentile[i_start_year] / average_ref_pr_percentile[
+            i_start_year]
+        pr_percentile_ratio[i_start_year].add_aux_coord(time_coord)
+
+        # percentiles of snow below temperature
+
+        average_ref_snow_below_percentile[i_start_year] = ensemble_average(models, ref_snow_below_percentile)
+        average_data_snow_below_percentile[i_start_year] = ensemble_average(models, data_snow_below_percentile)
+        snow_below_percentile_ratio[i_start_year] = average_data_snow_below_percentile[i_start_year] / \
+                                                    average_ref_snow_below_percentile[
+                                                        i_start_year]
+        snow_below_percentile_ratio[i_start_year].add_aux_coord(time_coord)
+
         dict_to_plot[temperature, i_start_year, 'days_below_temperature_ratio'] = days_below_temperature_ratio[
             i_start_year]
         dict_to_plot[temperature, i_start_year, 'mean_snow_below_temperature_ratio'] = \
             mean_snow_below_temperature_ratio[i_start_year]
         dict_to_plot[temperature, i_start_year, 'mean_precipitation_ratio'] = \
             mean_precipitation_ratio[i_start_year]
+        dict_to_plot[
+            temperature, i_start_year, 'pr_percentile_99.9_ratio'] = pr_percentile_ratio[i_start_year]
+        dict_to_plot[
+            temperature, i_start_year, 'snow_below_temp_percentile_99.9_ratio'] = snow_below_percentile_ratio[
+            i_start_year]
 
         dict_to_plot[
             temperature, i_start_year, 'days_below_temperature_ratio'].var_name = 'days_below_temperature_ratio'
-
         dict_to_plot[
             temperature, i_start_year, 'mean_snow_below_temperature_ratio'].var_name = 'mean_snow_below_temperature_ratio'
-
         dict_to_plot[
             temperature, i_start_year, 'mean_precipitation_ratio'].var_name = 'mean_precipitation_ratio'
+        dict_to_plot[
+            temperature, i_start_year, 'pr_percentile_99.9_ratio'].var_name = 'pr_percentile_' + str(
+            percentile_to_calculate) + '_ratio'
+        dict_to_plot[
+            temperature, i_start_year, 'snow_below_temp_percentile_99.9_ratio'].var_name = 'snow_below_' + str(
+            temperature) + 'K_percentile_' + str(percentile_to_calculate) + '_ratio'
 
     return dict_to_plot
 

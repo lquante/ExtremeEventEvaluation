@@ -339,8 +339,10 @@ def plot_data_development(ylims, modelname, filelist, arealist, areanames, scena
 
     if temperature:
         days_below_temperature_key = 'days_below_temperature_ratio'
-        mean_snow_beow_temperature_key = 'mean_snow_below_temperature_ratio'
-
+        mean_snow_below_temperature_key = 'mean_snow_below_temperature_ratio'
+        mean_pr_ratio_key = 'mean_precipitation_ratio'
+        percentile_pr_ratio_key = 'pr_percentile_99.9_ratio'
+        snow_below_percentile_key = 'snow_below_temp_percentile_99.9_ratio'
     # prepare time series of interesting phenomenoms by concatening all cubes:
     cubelists = {}
     all_files = iris.cube.CubeList()
@@ -368,7 +370,8 @@ def plot_data_development(ylims, modelname, filelist, arealist, areanames, scena
             population_cubes[areanames[i]] = (population_cube)
         i = i + 1
     if temperature:
-        ratios = [days_below_temperature_key, mean_snow_beow_temperature_key]
+        ratios = [days_below_temperature_key, mean_snow_below_temperature_key, mean_pr_ratio_key,
+                  percentile_pr_ratio_key, snow_below_percentile_key]
     else:
         ratios = [frequency_ratio_key, mean_ratio_key, es_ratio_key, quantile_ratio_key]
 

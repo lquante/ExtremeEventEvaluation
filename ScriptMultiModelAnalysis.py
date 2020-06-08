@@ -665,15 +665,16 @@ baseline_decades = int((baseline_end - historical_start + 1) / 10)
 
 if (temperature):
     # baseline
-    temperature_analysis(tas_cubes, prsn_cubes, pr_cubes, models, arealist, 'historical', historical_start,
-                         historical_start,
-                         baseline_decades, threshold_temperatures, historical=False)
-    # for i_scenario in tqdm(scenarios):
-    #     temperature_analysis(tas_cubes, prsn_cubes,pr_cubes, models, arealist, i_scenario, 2021, 1851, 8, threshold_temperatures,
-    #                                                  historical=False)
+    # temperature_analysis(tas_cubes, prsn_cubes, pr_cubes, models, arealist, 'historical', historical_start,
+    #                      historical_start,
+    #                      baseline_decades, threshold_temperatures, historical=False)
+    for i_scenario in tqdm(scenarios):
+        temperature_analysis(tas_cubes, prsn_cubes, pr_cubes, models, arealist, i_scenario, 2021, 1851, 8,
+                             threshold_temperatures,
+                             historical=False)
     # generate full historical data for comparison
-    temperature_analysis(tas_cubes, prsn_cubes, pr_cubes, models, arealist, 'historical', 1931, 1851, 9,
-                         threshold_temperatures)
+    # temperature_analysis(tas_cubes, prsn_cubes, pr_cubes, models, arealist, 'historical', 1931, 1851, 9,
+    #                      threshold_temperatures)
 
 
 else:
