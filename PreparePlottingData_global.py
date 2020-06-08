@@ -54,7 +54,6 @@ def quantile_collection(results, data_scenario, start_year, final_year, length_t
 
     for iterator_key in (quantile_cubelists.keys()):
         print(iterator_key)
-        print(quantile_cubelists[iterator_key][0])
         reference_cube = quantile_cubelists[iterator_key][0] - quantile_cubelists[iterator_key][0]
         if reference_cube.coords(long_name='year'):
             reference_cube.remove_coord('year')
@@ -68,7 +67,6 @@ def quantile_collection(results, data_scenario, start_year, final_year, length_t
                                               long_name='year', units='1', bounds=(start_year, final_year))
             reference_cube.add_aux_coord(time_coord)
             quantile_cubes[iterator_key] = reference_cube
-            print(reference_cube)
 
             for i_cube in quantile_cubelists[iterator_key]:
                 reference_cube += i_cube
@@ -78,7 +76,6 @@ def quantile_collection(results, data_scenario, start_year, final_year, length_t
                 reference_cube.remove_coord('year')
             reference_cube.add_aux_coord(time_coord)
             quantile_cubes[iterator_key] = reference_cube
-            print(reference_cube)
 
     for iterator_key in quantile_cubelists.keys():
         if iterator_key == ('snow_below_temperature', 273.15):
@@ -422,7 +419,7 @@ def ensemble_average_temperature(temperature, models, results, ref_results, data
 
             ref_snow_below_percentile[i_model] = reference_data[i_model]['quantiles'][
                 snow_below_percentile_key, temperature, percentile_to_calculate]
-            data_snow_below_percentile[i_model] = reference_data[i_model]['quantiles'][
+            data_snow_below_percentile[i_model] = data[i_model]['quantiles'][
                 snow_below_percentile_key, temperature, percentile_to_calculate]
 
         # add time coordinate to identify scenario decade from which the difference stems, to prepare timeplots of development
@@ -503,7 +500,7 @@ def ensemble_average_temperature(temperature, models, results, ref_results, data
         dict_to_plot[
             temperature, i_start_year, 'snow_below_temp_percentile_99.9_ratio'].var_name = 'snow_below_' + str(
             temperature) + 'K_percentile_' + str(percentile_to_calculate) + '_ratio'
-
+        print(dict_to_plot.keys())
     return dict_to_plot
 
 

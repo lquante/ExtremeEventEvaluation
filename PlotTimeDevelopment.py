@@ -278,7 +278,7 @@ def plot_cubelist_average_group(ylims, cubelist, filename, var_names, modelname,
     for i_cube in cubelist:
         plt.ylim(ylims)
         if i_cube.var_name in var_names:
-            print(i_cube.data)
+
             average = i_cube.collapsed(('latitude', 'longitude'), iris.analysis.MEAN, weights=weights)
             iplt.plot(average, linestyle='solid', lw='0.35', label=i_cube.var_name, )
     plt.title(modelname + " percentile: " + str(
@@ -342,7 +342,7 @@ def plot_data_development(ylims, modelname, filelist, arealist, areanames, scena
         mean_snow_below_temperature_key = 'mean_snow_below_temperature_ratio'
         mean_pr_ratio_key = 'mean_precipitation_ratio'
         percentile_pr_ratio_key = 'pr_percentile_99.9_ratio'
-        snow_below_percentile_key = 'snow_below_temp_percentile_99.9_ratio'
+        snow_below_percentile_key = 'snow_below_273.15K_percentile_99.9_ratio'
     # prepare time series of interesting phenomenoms by concatening all cubes:
     cubelists = {}
     all_files = iris.cube.CubeList()
