@@ -16,6 +16,7 @@ import iris.coord_categorisation
 import iris.plot as iplt
 import iris.quickplot as qplt
 import matplotlib.colors as clr
+import matplotlib.patches as mpatches
 import matplotlib.path as mpath
 import matplotlib.pyplot as plt
 import numpy as np
@@ -278,24 +279,23 @@ def plot_cubelist_average_group(ylims, cubelist, filename, var_names, modelname,
     for i_cube in cubelist:
         plt.ylim(ylims)
         if i_cube.var_name in var_names:
-
             average = i_cube.collapsed(('latitude', 'longitude'), iris.analysis.MEAN, weights=weights)
+            print(average)
             iplt.plot(average, linestyle='solid', lw='0.35', label=i_cube.var_name, )
-    plt.title(modelname + " percentile: " + str(
+
+    title_str = (modelname + " percentile: " + str(
         datapoint) + '\n' + scenario + " for " + areaname + ' ratios to baseline: ' + str(
         reference_start_year) + ' to ' + str(reference_final_year))
     if temperature:
-        plt.title(modelname + " snow below: " + str(
+        title_str = modelname + " snow between: " + str(
             datapoint) + "K" + '\n' + scenario + " for " + areaname + ' ratios to baseline: ' + str(
-            reference_start_year) + ' to ' + str(reference_final_year))
+            reference_start_year) + ' to ' + str(reference_final_year)
 
-    # start_date = datetime(1855,1,1,0,0,0,0)
-    # end_date = datetime(1925, 1, 1, 0, 0, 0, 0)
-    # delta = timedelta(days=3653)
-    # plt.xticks(mdates.drange(start_date, end_date, delta))
+    plt.title(title_str)
+
     plt.axhline(y=1, ls='dotted', lw=0.25, c='k')
     plt.legend()
-    plt.savefig(filename + '_' + scenario + '_' + str(datapoint) + '.png', dpi=300, bbox_inches='tight')
+    plt.savefig(filename + '_' + scenario + '_' + str(datapoint) + '.png', dpi=150, bbox_inches='tight')
     plt.close()
 
 
@@ -330,19 +330,21 @@ def plot_data_development(ylims, modelname, filelist, arealist, areanames, scena
         with open(i_file, 'rb') as stream:
             data_to_plot[i_file] = (pickle.load(stream))
     # TODO?!: cleaner way to extract quantile / tempearature which is plotted
-    datapoint = (list(data_to_plot[filelist[0]].keys())[1][0])
-
+    datapoint = str(list(data_to_plot[filelist[0]].keys())[1][0])
+    print(datapoint)
     frequency_ratio_key = 'frequency_ratio'
     quantile_ratio_key = 'percentile_ratio'
     es_ratio_key = 'EES_ratio'
     mean_ratio_key = 'mean_ratio'
 
     if temperature:
-        days_below_temperature_key = 'days_below_temperature_ratio'
-        mean_snow_below_temperature_key = 'mean_snow_below_temperature_ratio'
+        days_between_temperature_key = 'days_between_temperature_ratio'
+        mean_snow_between_temperature_key = 'mean_snow_between_temperature_ratio'
         mean_pr_ratio_key = 'mean_precipitation_ratio'
         percentile_pr_ratio_key = 'pr_percentile_99.9_ratio'
-        snow_below_percentile_key = 'snow_below_273.15K_percentile_99.9_ratio'
+        snow_between_percentile_key = 'snow_between_273.15K_percentile_99.9_ratio'
+        print('ratios complete')
+
     # prepare time series of interesting phenomenoms by concatening all cubes:
     cubelists = {}
     all_files = iris.cube.CubeList()
@@ -369,19 +371,21 @@ def plot_data_development(ylims, modelname, filelist, arealist, areanames, scena
             area_cubes[areanames[i]].append(area_cube)
             population_cubes[areanames[i]] = (population_cube)
         i = i + 1
+
     if temperature:
-        ratios = [days_below_temperature_key, mean_snow_below_temperature_key, mean_pr_ratio_key,
-                  percentile_pr_ratio_key, snow_below_percentile_key]
+        ratios = [days_between_temperature_key, mean_snow_between_temperature_key, mean_pr_ratio_key,
+                  percentile_pr_ratio_key, snow_between_percentile_key]
     else:
         ratios = [frequency_ratio_key, mean_ratio_key, es_ratio_key, quantile_ratio_key]
 
     for i_area in areanames:
         # test population weighting
+        print(i_area)
         plot_cubelist_average_group(ylims, area_cubes[i_area], str(i_area + '_population_weighted'), ratios,
                                     modelname + "_population_weighted",
                                     i_area, scenario, datapoint, population=population_cubes[i_area],
                                     temperature=temperature)
-
+        print(i_area + "population finished")
         plot_cubelist_average_group(ylims, (area_cubes[i_area]), str(i_area + '_ratios'), ratios, modelname,
                                     i_area, scenario, datapoint, temperature=temperature)
 
@@ -415,6 +419,54 @@ def population_weighting(cubelist, population_data):
         weighted_cube.var_name = iterator_cube.var_name + '_population_weighted'
 
     return weighted_cubelist
+
+
+def plot_areaboxes(arealist, testcube):
+    # TODO: figure out a way to transform to a
+    coordinate_projection = cartopy.crs.PlateCarree()
+    projection = cartopy.crs.AzimuthalEquidistant(central_latitude=90)
+    ax = plt.axes(projection=projection)
+
+    iris.plot.pcolormesh(testcube)
+
+    NUM_COLORS = len(arealist)
+    cm = plt.get_cmap('tab10')
+    i = 0
+
+    for i_area in arealist:
+        # TODO: fix this very shaky calculation in a more elegant, general way
+        max_lon = i_area[3]
+        min_lon = i_area[1]
+
+        max_lat = np.max((i_area[0], i_area[2]))
+        min_lat = np.min((i_area[0], i_area[2]))
+
+        height = max_lat - min_lat
+        if (max_lon + 180 > min_lon + 180):
+            width = abs(max_lon - min_lon)
+        else:
+            width = 360 - (abs(max_lon) + abs(min_lon))
+        xy = [min_lon, min_lat]
+
+        ax.add_patch(mpatches.Rectangle(xy=xy, width=width, height=height,
+                                        facecolor=(cm(i / NUM_COLORS)),
+                                        alpha=0.5,
+                                        transform=coordinate_projection)
+                     )
+        ax.text(xy[0] + 10, xy[1] + 10, str(i + 1), fontsize=6,
+                verticalalignment='top', color='red', transform=coordinate_projection)
+        i = i + 1
+    ax.gridlines()
+    theta = np.linspace(0, 2 * np.pi, 100)
+    center, radius = [0.5, 0.5], 0.5
+    verts = np.vstack([np.sin(theta), np.cos(theta)]).T
+    circle = mpath.Path(verts * radius + center)
+    ax.set_boundary(circle, transform=plt.gca().transAxes)
+    ax.coastlines()
+
+    plt.savefig('region_map.png', dpi=150, bbox_inches='tight')
+    plt.close()
+
 
 #
 # settings file import
@@ -465,17 +517,20 @@ current_population.remove_coord('raster')
 scaling_factor = 100000
 current_population.units = scaling_factor
 current_population = current_population / scaling_factor
-
-# set outputpath for plots etc
+plot_areaboxes(arealist[5:], cube_from_bounding_box(current_population, [30, -180, 90, 180]))
+# # set outputpath for plots etc
 for i_data in datapoints:
     date = datetime.now()
-    dirname = str(date) + "_data_" + str(i_data)
+    dirname = "data_" + str(i_data)
     os.mkdir(dirname)
     os.chdir(dirname)
+
     for i_scenario in scenarios:
         os.mkdir(i_scenario)
         os.chdir(i_scenario)
-        filelist = scenarios[i_scenario][i_data]
+        print(str(list(scenarios[i_scenario].keys())))
+        print(str(i_data))
+        filelist = scenarios[i_scenario][tuple(i_data)]
         timeperiod_length = 10
         reference_start_year = 1851
         reference_final_year = 1920
