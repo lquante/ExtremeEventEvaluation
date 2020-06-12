@@ -254,15 +254,19 @@ def extract_dates(cube, startyear, finalyear, year=False):
     return limited_cube
 
 
-def percentile_from_cubedict(cubedict, percentile, startyear, finalyear, year=False):
+def percentile_from_cubedict(cubedict, percentile, startyear, finalyear, year=False, nan_percentile=False):
     # extract data from cubes and merge
     keys = list(cubedict.keys())
     dataarray = extract_dates(cubedict[keys[0]], startyear, finalyear, year=year).data
     for i in range(1, len(cubedict)):
         dataarray = np.concatenate((dataarray, extract_dates(cubedict[keys[i]], startyear, finalyear, year=year).data),
                                    axis=0)
+
+    if (nan_percentile):
+        percentile_data = percentile_data = np.nanpercentile(dataarray, percentile, axis=0)
+    else:
+        percentile_data = np.percentile(dataarray, percentile, axis=0)
     # calculate percentile
-    percentile_data = np.percentile(dataarray, percentile, axis=0)
 
     # construct percentile cube to return
     percentile_cube = extract_dates(cubedict[keys[0]], startyear, finalyear).collapsed('time', iris.analysis.PERCENTILE,
@@ -342,8 +346,8 @@ def generate_temperature_snow_development(cubelist_temperature, cubelist_snow, c
     results = {}
     cuberesults = {}
     number_of_cubes = len(cubelist_temperature)
-    dict_snow_thresholded = {}
-
+    model_dict_snow_thresholded = {}
+    temperature_dict_snow_thresholded = {}
     for model_key in cubelist_temperature.keys():
         # calculate some metrics per cube from cubelist
         data = {}
@@ -362,31 +366,47 @@ def generate_temperature_snow_development(cubelist_temperature, cubelist_snow, c
 
         temperature_data = temperature_timeperiod.data
 
-        for i_temperature in threshold_temperatures:
+        for i_temperature_bin in threshold_temperatures:
+            lower_bound_temperature = float(i_temperature_bin[0])
+            upper_bound_temperature = float(i_temperature_bin[1])
 
-            threshold_temperature = float(i_temperature)
+            lower_bound_temperature_indicator_data = np.int8(lower_bound_temperature <= temperature_data)
+            upper_bound_temperature_indicator_data = np.int8(temperature_data < upper_bound_temperature)
+            sum_of_indicators = lower_bound_temperature_indicator_data + upper_bound_temperature_indicator_data
+            temperature_indicator_data = np.int8(sum_of_indicators == 2)
 
-            temperature_indicator_data = np.int8(temperature_data <= threshold_temperature)
             temperature_below_threshold = temperature_timeperiod.copy(data=temperature_indicator_data)
             temperature_below_threshold.var_name = (
-                    'indicator_temperature_below_' + str(threshold_temperature) + 'degree_K')
+                    'indicator_temperature_between_' + str(lower_bound_temperature) + '_and_' + str(
+                upper_bound_temperature) + 'degree_K')
 
             temperature_days = temperature_below_threshold.collapsed('time', iris.analysis.COUNT,
-                                                                     function=lambda x: x > 0, )
-            temperature_days.var_name = ('days_temperature_below_' + str(threshold_temperature) + 'degree_K')
+                                                                     function=lambda x: x > 0)
+            temperature_days.var_name = ('days_temperature_between_' + str(lower_bound_temperature) + '_and_' + str(
+                upper_bound_temperature) + 'degree_K')
             temperature_days.remove_coord('time')
+
             # calculate snowfall below temperature
-            snow_below_temperature = snow_timeperiod * temperature_below_threshold
-            snow_below_temperature.var_name = ('prsn_below_' + str(threshold_temperature) + 'degree_K')
 
-            dict_snow_thresholded[model_key] = snow_below_temperature
-            mean_snow_below_temperature = snow_below_temperature.collapsed('time', iris.analysis.MEAN)
-            mean_snow_below_temperature.var_name = ('mean_prsn_below_' + str(threshold_temperature) + 'degree_K')
-            mean_snow_below_temperature.remove_coord('time')
+            snow_between_temperature = snow_timeperiod * temperature_below_threshold
+            snow_between_temperature.var_name = ('prsn_between_' + str(lower_bound_temperature) + '_and_' + str(
+                upper_bound_temperature) + 'degree_K')
 
-            data['temperature_days', threshold_temperature] = temperature_days
-            data['snow_below_temperature', threshold_temperature] = snow_below_temperature
-            data['mean_snow_below_temperature', threshold_temperature] = mean_snow_below_temperature
+            snow_data_percentile = snow_timeperiod.data
+            snow_data_percentile[temperature_indicator_data == 0] = np.nan
+
+            model_dict_snow_thresholded[str(i_temperature_bin), model_key] = snow_between_temperature.copy(
+                data=snow_data_percentile)
+
+            total_snow_below_temperature = snow_between_temperature.collapsed('time', iris.analysis.SUM)
+
+            mean_snow_below_temperature = total_snow_below_temperature / temperature_days
+            mean_snow_below_temperature.var_name = ('mean_prsn_between_' + str(lower_bound_temperature) + '_and_' + str(
+                upper_bound_temperature) + 'degree_K')
+
+            data['temperature_days', str(i_temperature_bin)] = temperature_days
+            # data['snow_between_temperature', str(i_temperature_bin)] = snow_between_temperature
+            data['mean_snow_between_temperature', str(i_temperature_bin)] = mean_snow_below_temperature
 
         # get precipitation stats for comparison
         mean_precipitation = precipitation_timeperiod.collapsed('time', iris.analysis.MEAN)
@@ -396,6 +416,11 @@ def generate_temperature_snow_development(cubelist_temperature, cubelist_snow, c
     # sum up results from separate model cubes into a single cube
     model_keys = list(cubelist_temperature.keys())
 
+    for i_temperature_bin in threshold_temperatures:
+        only_model_dict_snow_thresholded = {}
+        for model_key in model_keys:
+            only_model_dict_snow_thresholded[model_key] = model_dict_snow_thresholded[str(i_temperature_bin), model_key]
+        temperature_dict_snow_thresholded[str(i_temperature_bin)] = only_model_dict_snow_thresholded
     for data_key in cuberesults[model_keys[0]].keys():
         results_data = cuberesults[model_keys[0]][data_key].data
         for i_model in range(1, number_of_cubes):
@@ -403,16 +428,20 @@ def generate_temperature_snow_development(cubelist_temperature, cubelist_snow, c
         # adjust to average measures:
         results_data = results_data / number_of_cubes
         results[data_key] = cuberesults[model_keys[0]][data_key].copy(data=results_data)
+    # transform snow_between temp dict to temperature bin wise results:
 
-    for i_temperature in threshold_temperatures:
-        # NB: just using percentiles in a crude way directly from settingsfile, to get the same as used for EEI of snow etc.
-        for i_percentile in percentiles:
-            # N-B: only fit for 1 temperature a time ATM, but anyways to speed up computation temperatures should be run seperatly
-            results['percentile_snow_below_temperature', i_temperature, i_percentile] = percentile_from_cubedict(
-                dict_snow_thresholded, i_percentile, startyear, finalyear, year=True)
-            results['precipitation_percentile', i_percentile] = percentile_from_cubedict(cubelist_precipitation,
-                                                                                         i_percentile, startyear,
-                                                                                         finalyear)
+    # NB: just using percentiles in a crude way directly from settingsfile, to get the same as used for EEI of snow etc.
+    for i_percentile in percentiles:
+        results['precipitation_percentile', i_percentile] = percentile_from_cubedict(cubelist_precipitation,
+                                                                                     i_percentile, startyear,
+                                                                                     finalyear)
+        for i_temperature_bin in threshold_temperatures:
+            results[
+                'snow_between_temperature_percentile', str(i_temperature_bin), i_percentile] = percentile_from_cubedict(
+                temperature_dict_snow_thresholded[str(i_temperature_bin)],
+                i_percentile, startyear,
+                finalyear, nan_percentile=True)
+
     return results
 
 
@@ -446,7 +475,7 @@ def calculate_snowfall_below_temperature_measures(historical_ensemble_cubelist_t
 
             scenario_start_list.append(scenario_start_list[index - 1] + number_of_years_to_compare)
 
-    num_cores = int(multiprocessing.cpu_count() / 2)
+    num_cores = int(multiprocessing.cpu_count() / 4)
     historical_starts = tqdm(historical_start_list)
     data = {}
 
@@ -463,12 +492,12 @@ def calculate_snowfall_below_temperature_measures(historical_ensemble_cubelist_t
 
     scenario_starts = tqdm(scenario_start_list)
     # results_cache = []
-    # for i_start in scenario_starts:
-    #     results_cache.append(temperature_dict_entry(i_start, scenario, ssp_ensemble_cubelist_temperature,
-    #                                       ssp_ensemble_cubelist_snow,
-    #                                       ssp_ensemble_cubelist_precipitation,
-    #                                       threshold_temperatures,
-    #                                       number_of_years_to_compare))
+    # # for i_start in scenario_starts:
+    # #     results_cache.append(temperature_dict_entry(i_start, scenario, ssp_ensemble_cubelist_temperature,
+    # #                                       ssp_ensemble_cubelist_snow,
+    # #                                       ssp_ensemble_cubelist_precipitation,
+    # #                                       threshold_temperatures,
+    # #                                       number_of_years_to_compare))
     # multi - processing for different start years
 
     results_cache = (Parallel(n_jobs=num_cores)(
@@ -595,14 +624,19 @@ scenarios = settings['scenarios']
 percentiles = settings['percentiles']
 historical_start = int(settings['historical_start'])
 baseline_end = int(settings['baseline_end'])
+baseline = int(settings['baseline'])
+full_historical = int(settings['full_historical'])
+scenario_analysis = int(settings['scenario_analysis'])
 data_dictionary = {}
+
+# filelists to be given sorted by scenarios and models
+filelist_tas = settings['files']
+filelist_prsn = settings['files']
+filelist_pr = settings['files']
 
 # modified data import directly from isimip *.nc files
 if (temperature):
-    # filelists to be given sorted by scenarios and models
-    filelist_tas = settings['files']
-    filelist_prsn = settings['files']
-    filelist_pr = settings['files']
+
     # load data
     tas_cubes = {}
     prsn_cubes = {}
@@ -618,28 +652,14 @@ if (temperature):
     # unify_current_decade(prsn_cubes, i_model, 'ssp585')
 
 else:
-    for i_model in models:
-        data_dictionary[i_model, 'historical'] = filepath_generator(basepath, 'historical', i_model)
-        for i_scenario in scenarios:
-            data_dictionary[i_model, i_scenario] = filepath_generator(basepath, i_scenario, i_model)
-
-    # generate dictionary of  data [model,scenario]
-
-    # get all keys from dictionary
-    data_keys = data_dictionary.keys()
-    filepaths = {}
-    for i_key in data_keys:
-        with open(data_dictionary[i_key], 'r') as stream:
-            try:
-                filepaths[i_key] = yaml.load(stream)
-            except yaml.YAMLError as exc:
-                print(exc)
-    # load data
-    cubes = load_from_nc(filepaths, variablename, 30)
-
+    prsn_cubes = {}
+    scenarios_to_be_compared = ['historical', 'ssp126', 'ssp370', 'ssp585']
+    for i_scenario in scenarios_to_be_compared:
+        for i_model in models:
+            prsn_cubes[i_model, i_scenario] = load_from_nc(filelist_prsn[i_scenario][i_model], 'snowfall_flux', 30)
     # TODO: flexible extension of historical data with respective ssp, but should not make a big difference
     for i_model in models:
-        unify_current_decade(cubes, i_model, 'ssp585')
+        unify_current_decade(prsn_cubes, i_model, 'ssp585')
 
 # ignore warnings
 warnings.simplefilter("ignore")
@@ -664,28 +684,35 @@ arealist = {'NORTHERN_HEMISPHERE_1': northern_hemisphere_first_quarter,
 baseline_decades = int((baseline_end - historical_start + 1) / 10)
 
 if (temperature):
-    # baseline
-    # temperature_analysis(tas_cubes, prsn_cubes, pr_cubes, models, arealist, 'historical', historical_start,
-    #                      historical_start,
-    #                      baseline_decades, threshold_temperatures, historical=False)
-    for i_scenario in tqdm(scenarios):
-        temperature_analysis(tas_cubes, prsn_cubes, pr_cubes, models, arealist, i_scenario, 2021, 1851, 8,
-                             threshold_temperatures,
-                             historical=False)
-    # generate full historical data for comparison
-    # temperature_analysis(tas_cubes, prsn_cubes, pr_cubes, models, arealist, 'historical', 1931, 1851, 9,
-    #                      threshold_temperatures)
+    if (baseline == 1):
+        # baseline
+        temperature_analysis(tas_cubes, prsn_cubes, pr_cubes, models, arealist, 'historical', historical_start,
+                             historical_start,
+                             baseline_decades, threshold_temperatures, historical=False)
+    if (full_historical == 1):
+        # generate full historical data for comparison
+        temperature_analysis(tas_cubes, prsn_cubes, pr_cubes, models, arealist, 'historical', 1931, 1851, 9,
+                             threshold_temperatures)
+    if (scenario_analysis == 1):
+
+        for i_scenario in tqdm(scenarios):
+            temperature_analysis(tas_cubes, prsn_cubes, pr_cubes, models, arealist, i_scenario, 2021, 1851, 8,
+                                 threshold_temperatures,
+                                 historical=False)
+
 
 
 else:
-    multi_region_threshold_analysis_preindustrial(cubes, models, arealist, 'historical', historical_start,
+    multi_region_threshold_analysis_preindustrial(prsn_cubes, models, arealist, 'historical', historical_start,
                                                   historical_start,
                                                   baseline_decades, percentiles, historical=False)
 
     # generate ssp data (without historical leg, since done in next step
     for i_scenario in tqdm(scenarios):
-        multi_region_threshold_analysis_preindustrial(cubes, models, arealist, i_scenario, 2021, 1851, 8, percentiles,
+        multi_region_threshold_analysis_preindustrial(prsn_cubes, models, arealist, i_scenario, 2021, 1851, 8,
+                                                      percentiles,
                                                       historical=False)
 
     # generate full historical data for comparison
-    multi_region_threshold_analysis_preindustrial(cubes, models, arealist, 'historical', 1931, 1851, 9, percentiles)
+    multi_region_threshold_analysis_preindustrial(prsn_cubes, models, arealist, 'historical', 1931, 1851, 9,
+                                                  percentiles)
