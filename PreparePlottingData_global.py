@@ -24,9 +24,6 @@ def specify_results(resultsdict, modelname, comparisonname, regionname, multimod
     return output
 
 
-
-
-
 def quantile_collection(results, data_scenario, start_year, final_year, length_timeperiod, rolling_window=False):
     data_timeperiod = final_year - start_year + 1
     number_of_timeperiods = data_timeperiod / length_timeperiod
@@ -113,8 +110,7 @@ def mask_close_to_0_values(cube):
     return cube_masked
 
 
-
-def ensemble_average_quantile_baseline(quantile_to_calculate, models, results, ref_results, data_scenario,
+def ensemble_average_quantile_baseline(quantile_to_calculate, models, ensemblename, results, ref_results, data_scenario,
                                        starting_years,
                                        length_timeperiod, reference_scenario, reference_start_year,
                                        reference_final_year, rolling_window=False):
@@ -222,7 +218,7 @@ def ensemble_average_quantile_baseline(quantile_to_calculate, models, results, r
 
         baseline_average[i_start_year] = ensemble_average(models, baseline)
         # mask data where quantile ==0
-        baseline_average[i_start_year] = mask_close_to_0_values(baseline_average[i_start_year])
+        # baseline_average[i_start_year] = mask_close_to_0_values(baseline_average[i_start_year])
         ref_mean_average[i_start_year] = ensemble_average(models, ref_mean)
 
         data_mean_average[i_start_year] = ensemble_average(models, data_mean)
@@ -241,6 +237,7 @@ def ensemble_average_quantile_baseline(quantile_to_calculate, models, results, r
         diff_mean_average[i_start_year].add_aux_coord(time_coord)
 
         quantile_average[i_start_year] = ensemble_average(models, quantile_dict)
+
         quantile_baseline_ratio[i_start_year] = quantile_average[i_start_year] / baseline_average[i_start_year]
         quantile_baseline_ratio[i_start_year].add_aux_coord(time_coord)
 
@@ -273,6 +270,7 @@ def ensemble_average_quantile_baseline(quantile_to_calculate, models, results, r
         expected_snowfall_ratio[i_start_year] = data_expected_snowfall_average[i_start_year] / \
                                                 ref_expected_snowfall_average[i_start_year]
         expected_snowfall_ratio[i_start_year].add_aux_coord(time_coord)
+
         mean_ratios[start_year] = data_mean_average[i_start_year] / ref_mean_average[i_start_year]
 
         mean_ratios[start_year].add_aux_coord(time_coord)
@@ -291,45 +289,28 @@ def ensemble_average_quantile_baseline(quantile_to_calculate, models, results, r
         dict_to_plot[quantile_to_calculate, i_start_year, 'diff_es_baseline'] = diff_es_baseline_relative_average[
             i_start_year]
 
-        dict_to_plot[quantile_to_calculate, i_start_year, 'mean_ratio'] = mean_ratios[i_start_year]
-        dict_to_plot[quantile_to_calculate, i_start_year, 'frequency_ratio'] = frequency_ratios[i_start_year]
-        dict_to_plot[quantile_to_calculate, i_start_year, 'percentile_ratio'] = quantile_baseline_ratio[i_start_year]
-        dict_to_plot[quantile_to_calculate, i_start_year, 'es_ratio'] = expected_snowfall_ratio[i_start_year]
+        dict_to_plot[quantile_to_calculate, i_start_year, 'mean'] = mean_ratios[i_start_year]
+        dict_to_plot[quantile_to_calculate, i_start_year, 'frequency'] = frequency_ratios[i_start_year]
+        dict_to_plot[quantile_to_calculate, i_start_year, 'percentile'] = quantile_baseline_ratio[i_start_year]
+        dict_to_plot[quantile_to_calculate, i_start_year, 'es'] = expected_snowfall_ratio[i_start_year]
 
         dict_to_plot[i_start_year, 'diff_mean'].var_name = 'diff_mean'
         dict_to_plot[quantile_to_calculate, i_start_year, 'diff_frequency'].var_name = 'diff_frequency'
         dict_to_plot[quantile_to_calculate, i_start_year, 'diff_es'].var_name = 'diff_es'
         dict_to_plot[quantile_to_calculate, i_start_year, 'diff_es_baseline'].var_name = 'diff_es_baseline'
-        dict_to_plot[quantile_to_calculate, i_start_year, 'frequency_ratio'].var_name = 'frequency_ratio'
-        dict_to_plot[quantile_to_calculate, i_start_year, 'percentile_ratio'].var_name = 'percentile_ratio'
-        dict_to_plot[quantile_to_calculate, i_start_year, 'es_ratio'].var_name = 'EES_ratio'
-        dict_to_plot[quantile_to_calculate, i_start_year, 'mean_ratio'].var_name = 'mean_ratio'
+        dict_to_plot[quantile_to_calculate, i_start_year, 'frequency'].var_name = 'frequency'
+        dict_to_plot[quantile_to_calculate, i_start_year, 'percentile'].var_name = 'percentile'
+        dict_to_plot[quantile_to_calculate, i_start_year, 'es'].var_name = 'EES'
+        dict_to_plot[quantile_to_calculate, i_start_year, 'mean'].var_name = 'mean'
 
-        # get model contribution stats
-        for i_model in ensemble_members:
-            dict_to_plot[quantile_to_calculate, i_start_year, i_model, 'exceedance_number_contribuition'] = \
-                data['ensemble']['quantiles']['exceedance_number_contribuition', quantile_to_calculate, i_model]
-            dict_to_plot[quantile_to_calculate, i_start_year, i_model, 'exceedance_number_contribuition'].add_aux_coord(
-                time_coord)
-            dict_to_plot[quantile_to_calculate, i_start_year, i_model, 'exceedance_number_contribuition'].remove_coord(
-                'year')
-            dict_to_plot[
-                quantile_to_calculate, i_start_year, i_model, 'exceedance_number_contribuition'].var_name = str(
-                i_model) + '_exceedance_number_contribuition'
-            dict_to_plot[quantile_to_calculate, i_start_year, i_model, 'exceedance_mean_contribuition'] = \
-                data['ensemble']['quantiles']['exceedance_mean_contribuition', quantile_to_calculate, i_model]
-            dict_to_plot[quantile_to_calculate, i_start_year, i_model, 'exceedance_mean_contribuition'].add_aux_coord(
-                time_coord)
-            dict_to_plot[quantile_to_calculate, i_start_year, i_model, 'exceedance_mean_contribuition'].remove_coord(
-                'year')
-            dict_to_plot[
-                quantile_to_calculate, i_start_year, i_model, 'exceedance_mean_contribuition'].var_name = str(
-                i_model) + '_exceedance_mean_contribuition'
+        # replace NAN values resulting from divison by zero by 0 TODO: more elegant fix for 0 baseline percentile
+        for i_key in list(dict_to_plot.keys()):
+            np.nan_to_num(dict_to_plot[i_key].data, copy=False)
 
     return dict_to_plot
 
 
-def ensemble_average_temperature(temperature, models, results, ref_results, data_scenario,
+def ensemble_average_temperature(temperature, models, ensemblename, results, ref_results, data_scenario,
                                  starting_years,
                                  length_timeperiod, reference_scenario, reference_start_year,
                                  reference_final_year, rolling_window=False):
@@ -419,9 +400,9 @@ def ensemble_average_temperature(temperature, models, results, ref_results, data
             data_pr_percentile[i_model] = data[i_model]['quantiles'][pr_percentile_key, percentile_to_calculate]
 
             ref_snow_between_percentile[i_model] = reference_data[i_model]['quantiles'][
-                snow_between_percentile_key, temperature, percentile_to_calculate]
+                snow_between_percentile_key, str(temperature), percentile_to_calculate]
             data_snow_between_percentile[i_model] = data[i_model]['quantiles'][
-                snow_between_percentile_key, temperature, percentile_to_calculate]
+                snow_between_percentile_key, str(temperature), percentile_to_calculate]
 
         # add time coordinate to identify scenario decade from which the difference stems, to prepare timeplots of development
         datetime_year = datetime(int(start_year + length_timeperiod / 2 - 1), 1, 1, 0, 0, 0, 0).toordinal()
@@ -464,6 +445,7 @@ def ensemble_average_temperature(temperature, models, results, ref_results, data
 
         average_ref_pr_percentile[i_start_year] = ensemble_average(models, ref_pr_percentile)
         average_data_pr_percentile[i_start_year] = ensemble_average(models, data_pr_percentile)
+
         pr_percentile_ratio[i_start_year] = average_data_pr_percentile[i_start_year] / average_ref_pr_percentile[
             i_start_year]
         pr_percentile_ratio[i_start_year].add_aux_coord(time_coord)
@@ -477,38 +459,38 @@ def ensemble_average_temperature(temperature, models, results, ref_results, data
                                                           i_start_year]
         snow_between_percentile_ratio[i_start_year].add_aux_coord(time_coord)
 
-        dict_to_plot[str(temperature), i_start_year, 'days_between_temperature_ratio'] = days_between_temperature_ratio[
+        dict_to_plot[str(temperature), i_start_year, 'days_between_temperature'] = days_between_temperature_ratio[
             i_start_year]
-        dict_to_plot[str(temperature), i_start_year, 'mean_snow_between_temperature_ratio'] = \
+        dict_to_plot[str(temperature), i_start_year, 'mean_snow_between_temperature'] = \
             mean_snow_between_temperature_ratio[i_start_year]
-        dict_to_plot[str(temperature), i_start_year, 'mean_precipitation_ratio'] = \
+        dict_to_plot[str(temperature), i_start_year, 'mean_precipitation'] = \
             mean_precipitation_ratio[i_start_year]
         dict_to_plot[
             str(temperature), i_start_year, 'pr_percentile_' + str(
-                percentile_to_calculate) + '_ratio'] = pr_percentile_ratio[i_start_year]
+                percentile_to_calculate) + ''] = pr_percentile_ratio[i_start_year]
         dict_to_plot[
-            temperature, i_start_year, 'snow_between_' + str(
-                temperature) + 'K_percentile_' + str(percentile_to_calculate) + '_ratio'] = \
+            str(temperature), i_start_year, 'snow_between_' + str(
+                temperature) + 'K_percentile_' + str(percentile_to_calculate) + ''] = \
             snow_between_percentile_ratio[
                 i_start_year]
 
         dict_to_plot[
             str(
-                temperature), i_start_year, 'days_between_temperature_ratio'].var_name = 'days_between_temperature_ratio'
+                temperature), i_start_year, 'days_between_temperature'].var_name = 'days_between_temperature'
         dict_to_plot[
             str(
-                temperature), i_start_year, 'mean_snow_between_temperature_ratio'].var_name = 'mean_snow_between_temperature_ratio'
+                temperature), i_start_year, 'mean_snow_between_temperature'].var_name = 'mean_snow_between_temperature'
         dict_to_plot[
-            str(temperature), i_start_year, 'mean_precipitation_ratio'].var_name = 'mean_precipitation_ratio'
+            str(temperature), i_start_year, 'mean_precipitation'].var_name = 'mean_precipitation'
         dict_to_plot[
             str(temperature), i_start_year, 'pr_percentile_' + str(
-                percentile_to_calculate) + '_ratio'].var_name = 'pr_percentile_' + str(
-            percentile_to_calculate) + '_ratio'
+                percentile_to_calculate) + ''].var_name = 'pr_percentile_' + str(
+            percentile_to_calculate) + ''
         dict_to_plot[
-            temperature, i_start_year, 'snow_between_' + str(
+            str(temperature), i_start_year, 'snow_between_' + str(
                 temperature) + 'K_percentile_' + str(
-                percentile_to_calculate) + '_ratio'].var_name = 'snow_between_' + str(
-            temperature) + 'K_percentile_' + str(percentile_to_calculate) + '_ratio'
+                percentile_to_calculate) + ''].var_name = 'snow_between_' + str(
+            np.min(temperature)) + "_" + str(np.max(temperature)) + 'K_percentile_' + str(percentile_to_calculate) + ''
         print(dict_to_plot.keys())
     return dict_to_plot
 
@@ -535,12 +517,12 @@ def ensemble_plotting_average(models, data_scenarios, data_to_calculate, data_re
             for i_reference_scenario in reference_scenarios:
                 if temperature:
                     plotting_data[str(i_datapoint), i_scenario, i_reference_scenario] = ensemble_average_temperature(
-                        i_datapoint, models, ensemble_results, ref_ensemble_results, i_scenario,
+                        i_datapoint, models, 'ensemble', ensemble_results, ref_ensemble_results, i_scenario,
                         starting_years, length_timerperiod,
                         i_reference_scenario, baseline_start, baseline_end, rolling_window=rolling_window)
                 else:
                     plotting_data[i_datapoint, i_scenario, i_reference_scenario] = ensemble_average_quantile_baseline(
-                        i_datapoint, models, ensemble_results, ref_ensemble_results, i_scenario,
+                        i_datapoint, models, 'ensemble', ensemble_results, ref_ensemble_results, i_scenario,
                         starting_years, length_timerperiod,
                         i_reference_scenario, baseline_start, baseline_end, rolling_window=rolling_window)
 
@@ -593,6 +575,7 @@ reference_files = settings['reference_files']
 outputdir = settings['outputdir']
 areanames = settings['areanames']
 scenarios = settings['scenarios']
+modellist = settings['modellist']
 
 baseline_start = settings['baseline_start']
 baseline_end = settings['baseline_end']
@@ -606,7 +589,7 @@ else:
     rolling_window = False
 
 ensemble_members = settings['ensemble_members']
-
+ensemble_name = settings['ensemble_name']
 # if temperature data
 temperature = settings['temperature']
 if temperature == 1:
@@ -625,9 +608,6 @@ os.chdir(outputdir)
 data_results = load_results(data_filelist)
 ref_results = load_results(reference_files)
 
-# define models to be handled separatly
-modellist = [
-    'ensemble']
 # loop over all time periods
 for i_start_years in tqdm(start_years):
     cache_plotting_data = {}
@@ -649,16 +629,22 @@ for i_start_years in tqdm(start_years):
                 partial_data_cubelist.append(cache_plotting_data[i_areaname][i_key][i_second_key])
             equalise_attributes(partial_data_cubelist)
             unify_time_units(partial_data_cubelist)
+            for i_cube in partial_data_cubelist:
+                i_cube.coord('longitude').bounds = None
+                i_cube.coord('latitude').bounds = None
+
             global_plotting_data[i_second_key] = partial_data_cubelist.concatenate_cube(check_aux_coords=False)
+
         min_start_year = np.min(start_years)
         max_start_year = np.max(start_years)
 
-        filename = 'frequency_es_quantile_ratios_' + str('global') + "_" + str('preindustrial') + "_" + str(
+        filename = 'snow_stats_' + str(ensemble_name) + "_" + str('global') + "_" + str('preindustrial') + "_" + str(
             scenario) + "_" + str(ref_scenario) + "_" + str(datapoint) + "_" + str(min_start_year) + "_" + str(
             max_start_year) + "_" + str(rolling_window)
         if temperature:
-            filename = 'snow_between_temperature_ratios_' + str('global') + "_" + str('preindustrial') + "_" + str(
-                scenario) + "_" + str(ref_scenario) + "_" + str(datapoint) + "_" + str(min_start_year) + "_" + str(
-                max_start_year) + "_" + str(rolling_window)
+            filename = 'snow_temperature_stats_' + str(ensemble_name) + "_" + str('global') + "_" + str(
+                'preindustrial') + "_" + str(scenario) + "_" + str(ref_scenario) + "_" + str(datapoint) + "_" + str(
+                min_start_year) \
+                       + "_" + str(max_start_year) + "_" + str(rolling_window)
         file = open(filename, 'wb')
         pickle.dump(global_plotting_data, file)
