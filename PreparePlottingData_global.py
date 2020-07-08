@@ -210,7 +210,8 @@ def ensemble_average_quantile_baseline(quantiles_to_calculate, models, ensemblen
             ocean_masked_ref_mean_average = iris.util.mask_cube(unmasked_ref_mean, ocean_mask)
             np.ma.filled(ocean_masked_ref_mean_average, np.nan)
             # generate mask for values in decentiles of meanTODO: generalization might be useful
-            percentile_thresholds = [(0,100),(0,50),(33,100),(25,100),(0,10),(10,20),(30,40),(40,50),(50,100),(50,60) ,(60, 70),(70,80),(80,90),(90,100)]
+            #percentile_thresholds = [(0,100),(0,50),(33,100),(25,100),(0,10),(10,20),(30,40),(40,50),(50,100),(50,60),(60, 70),(70,80),(80,90),(90,100)]
+            percentile_thresholds = [(25, 100)]
             for i_percentile_threshold in percentile_thresholds:
                 unmasked_baseline = ensemble_average(models, baseline)
                 unmasked_percentile = ensemble_average(models, quantile_dict)
