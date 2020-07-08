@@ -545,70 +545,70 @@ def plot_development_multiple_scenarios(ylims, modelname, filelist_dict, arealis
             area_cubes[areanames[i]] = scenario_area_data
             i = i + 1
 
-        # # for i_datapoint in datapoints:
-        # #     frequency_ratio_key = 'frequency_' + str(i_datapoint)
-        # #     quantile_ratio_key = 'percentile_' + str(i_datapoint)
-        # #     es_ratio_key = 'EES_' + str(i_datapoint)
-        # #     mean_ratio_key = 'mean'
-        # #
-        # #     if temperature:
-        # #         days_between_temperature_key = 'days_between_temperature'
-        # #         mean_snow_between_temperature_key = 'mean_snow_between_temperature'
-        # #         mean_pr_ratio_key = 'mean_precipitation'
-        # #         percentile_pr_ratio_key = 'pr_percentile_99.9'
-        # #         snow_between_percentile_key = 'snow_between_' + str(np.min(i_datapoint)) + '_' + str(
-        # #             np.max(i_datapoint)) + 'K_percentile_99.9'
-        # #
-        # #     if temperature:
-        # #         ratios = [days_between_temperature_key, mean_snow_between_temperature_key,
-        # #                   percentile_pr_ratio_key, snow_between_percentile_key]
-        # #     else:
-        #
-        #         #variable_keys = [mean_ratio_key, es_ratio_key, quantile_ratio_key]
-        #
-        #         #percentile_bins = [(0,50),(50,100),(33,100),(25,100)]
-        #
-        #     #level_bins = [(0,10),(10,20),(30,40),(40,50),(50,60),(60, 70),(70,80),(80,90),(90,100)]
-        #     # plot summary map for levels of bins:
-        #     level_sample_key = 'mean'
-        #     levelnames = []
-        #     # for i_bin in level_bins:
-        #     #     levelnames.append(level_sample_key + "_" + str(i_bin[0]) + "_" + str(i_bin[1]))
-        #     # for i_scenario in scenarios:
-        #     #     levelcubes = {}
-        #     #     for i_cube in scenario_cubelists[i_scenario]:
-        #     #         if (i_cube.var_name in levelnames):
-        #     #             levelcubes[i_cube.var_name] = i_cube
-        #     #     print(levelcubes)
-        #     #     plot_levels('mean_decentiles', levelcubes, i_scenario)
-        #     #
-        #     #
-        #     # for i_bin in percentile_bins:
-        #     #     ratios = []
-        #     #     for i_variable in variable_keys:
-        #     #             ratios.append(i_variable + "_" + str(i_bin[0]) + "_" + str(i_bin[1]))
-        #     #
-        #     #     for i_area in areanames:
-        #     #         # test population weighting
-        #     #         print(i_area)
-        #     #         if populationweighting:
-        #     #             plot_multiple_variables_multiple_scenario(ylims, area_cubes[i_area], str(i_area + '_population_weighted'),
-        #     #                                                       ratios,
-        #     #                                                       modelname + "_population_weighted",
-        #     #                                                       i_area, scenarios, scenario_colors, i_datapoint,
-        #     #                                                       population=population_cubes[i_area],
-        #     #                                                       temperature=temperature)
-        #     #             print(i_area + "population finished")
-        #     #         plot_multiple_variables_multiple_scenario(ylims, area_cubes[i_area], str(i_area + '_ratios_'+ str(i_bin[0]) + "_" + str(i_bin[1])), ratios, modelname,
-        #     #                                                   i_area, scenarios, scenario_colors, i_datapoint,
-        #     #                                                   temperature=temperature)
-        #     #     if maps:
-        #     #
-        #     #         for i_scenario in scenarios:
-        #     #             plot_min_max_maps(scenario_cubelists[i_scenario],ratios, 'NORTHERN_HEMISPHERE', i_scenario, modelname,
-        #     #                                      i_datapoint)
-        #     #             plot_start_end_maps(scenario_cubelists[i_scenario], ratios, 'NORTHERN_HEMISPHERE', i_scenario, modelname,
-        #     #                               i_datapoint)
+        for i_datapoint in datapoints:
+            frequency_ratio_key = 'frequency_' + str(i_datapoint)
+            quantile_ratio_key = 'percentile_' + str(i_datapoint)
+            es_ratio_key = 'EES_' + str(i_datapoint)
+            mean_ratio_key = 'mean'
+
+            if temperature:
+                days_between_temperature_key = 'days_between_temperature'
+                mean_snow_between_temperature_key = 'mean_snow_between_temperature'
+                mean_pr_ratio_key = 'mean_precipitation'
+                percentile_pr_ratio_key = 'pr_percentile_99.9'
+                snow_between_percentile_key = 'snow_between_' + str(np.min(i_datapoint)) + '_' + str(
+                    np.max(i_datapoint)) + 'K_percentile_99.9'
+
+            if temperature:
+                ratios = [days_between_temperature_key, mean_snow_between_temperature_key,
+                          percentile_pr_ratio_key, snow_between_percentile_key]
+            else:
+
+                variable_keys = [mean_ratio_key, es_ratio_key, quantile_ratio_key]
+
+                percentile_bins = [(25,100)]
+
+            level_bins = [(25,100)]
+            # plot summary map for levels of bins:
+            level_sample_key = 'mean'
+            levelnames = []
+            for i_bin in level_bins:
+                levelnames.append(level_sample_key + "_" + str(i_bin[0]) + "_" + str(i_bin[1]))
+            for i_scenario in scenarios:
+                levelcubes = {}
+                for i_cube in scenario_cubelists[i_scenario]:
+                    if (i_cube.var_name in levelnames):
+                        levelcubes[i_cube.var_name] = i_cube
+                print(levelcubes)
+                plot_levels('mean_decentiles', levelcubes, i_scenario)
+
+
+            for i_bin in percentile_bins:
+                ratios = []
+                for i_variable in variable_keys:
+                        ratios.append(i_variable + "_" + str(i_bin[0]) + "_" + str(i_bin[1]))
+
+                for i_area in areanames:
+                    # test population weighting
+                    print(i_area)
+                    if populationweighting:
+                        plot_multiple_variables_multiple_scenario(ylims, area_cubes[i_area], str(i_area + '_population_weighted'),
+                                                                  ratios,
+                                                                  modelname + "_population_weighted",
+                                                                  i_area, scenarios, scenario_colors, i_datapoint,
+                                                                  population=population_cubes[i_area],
+                                                                  temperature=temperature)
+                        print(i_area + "population finished")
+                    plot_multiple_variables_multiple_scenario(ylims, area_cubes[i_area], str(i_area + '_ratios_'+ str(i_bin[0]) + "_" + str(i_bin[1])), ratios, modelname,
+                                                              i_area, scenarios, scenario_colors, i_datapoint,
+                                                              temperature=temperature)
+                if maps:
+
+                    for i_scenario in scenarios:
+                        plot_min_max_maps(scenario_cubelists[i_scenario],ratios, 'NORTHERN_HEMISPHERE', i_scenario, modelname,
+                                                 i_datapoint)
+                        plot_start_end_maps(scenario_cubelists[i_scenario], ratios, 'NORTHERN_HEMISPHERE', i_scenario, modelname,
+                                          i_datapoint)
         # optional analysis of development of different levels of ees in parallel to identify switch of sign of EES trend
         EES_level_curves = True
         if EES_level_curves:
