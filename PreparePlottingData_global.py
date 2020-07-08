@@ -109,163 +109,164 @@ def mask_close_to_0_values(cube):
     return cube_masked
 
 
-def ensemble_average_quantile_baseline(quantile_to_calculate, models, ensemblename, results, ref_results, data_scenario,
+def ensemble_average_quantile_baseline(quantiles_to_calculate, models, ensemblename, results, ref_results, data_scenario,
                                        starting_years,
                                        length_timeperiod, reference_scenario, reference_start_year,
                                        reference_final_year, rolling_window=False):
     dict_to_plot = {}
-    reference_data = {}
-    data = {}
-    baseline = {}
+    for quantile_to_calculate in quantiles_to_calculate:
+        reference_data = {}
+        data = {}
+        baseline = {}
 
-    quantile_dict = {}
-    ref_exceedances = {}
-    ref_mean = {}
-    ref_relevance_mask = {}
-    ref_frequency = {}
-    ref_expected_snowfall = {}
-    data_exceedances = {}
-    data_mean = {}
-    data_frequency = {}
-    data_expected_snowfall = {}
-    diff_frequency = {}
-    diff_expected_snowfall = {}
+        quantile_dict = {}
+        ref_exceedances = {}
+        ref_mean = {}
+        ref_relevance_mask = {}
+        ref_frequency = {}
+        ref_expected_snowfall = {}
+        data_exceedances = {}
+        data_mean = {}
+        data_frequency = {}
+        data_expected_snowfall = {}
+        diff_frequency = {}
+        diff_expected_snowfall = {}
 
-    quantile_key = "quantile"
-    exceedance_key = "exceedance"
-    frequency_key = 'number_exceedances'
-    mean_exceedance_key = 'mean_exceedance'
-    relative_mean_exceedance_key = 'baseline_relative_mean_exceedance'
+        quantile_key = "quantile"
+        exceedance_key = "exceedance"
+        frequency_key = 'number_exceedances'
+        mean_exceedance_key = 'mean_exceedance'
+        relative_mean_exceedance_key = 'baseline_relative_mean_exceedance'
 
-    baseline_average = {}
-    quantile_average = {}
-    quantile_baseline_ratio = {}
+        baseline_average = {}
+        quantile_average = {}
+        quantile_baseline_ratio = {}
 
-    expected_snowfall_ratio = {}
-    ref_frequency_average = {}
-    ref_expected_snowfall_average = {}
+        expected_snowfall_ratio = {}
+        ref_frequency_average = {}
+        ref_expected_snowfall_average = {}
 
-    data_frequency_average = {}
-    data_expected_snowfall_average = {}
+        data_frequency_average = {}
+        data_expected_snowfall_average = {}
 
-    ref_mean_average = {}
-    data_mean_average = {}
-    diff_mean_average = {}
-    mean_ratios = {}
-    frequency_ratios = {}
-    diff_frequency_average = {}
-    diff_expected_snowfall_average = {}
+        ref_mean_average = {}
+        data_mean_average = {}
+        diff_mean_average = {}
+        mean_ratios = {}
+        frequency_ratios = {}
+        diff_frequency_average = {}
+        diff_expected_snowfall_average = {}
 
-    diff_expected_snowfall_average_relative = {}
-    ref_ensemble_exceedances = {}
-    data_ensemble_exceedances = {}
-    for i_start_year in starting_years:
-        start_year = i_start_year
-        final_year = start_year + length_timeperiod - 1
-        print(start_year)
-        print(final_year)
+        diff_expected_snowfall_average_relative = {}
+        ref_ensemble_exceedances = {}
+        data_ensemble_exceedances = {}
+        for i_start_year in starting_years:
+            start_year = i_start_year
+            final_year = start_year + length_timeperiod - 1
+            print(start_year)
+            print(final_year)
 
-        # add time coordinate to identify scenario decade from which the difference stems, to prepare timeplots of development
-        datetime_year = datetime(int(start_year + length_timeperiod / 2 - 1), 1, 1, 0, 0, 0, 0).toordinal()
-        datetime_start_year = datetime(int(start_year), 1, 1, 0, 0, 0, 0).toordinal()
-        datetime_final_year = datetime(int(final_year), 1, 1, 0, 0, 0, 0).toordinal()
-        time_coord = iris.coords.AuxCoord(datetime_year,
-                                          long_name='scenario_year',
-                                          units=cf_units.Unit('days since 1-01-01', calendar='proleptic_gregorian'),
-                                          bounds=(datetime_start_year, datetime_final_year))
+            # add time coordinate to identify scenario decade from which the difference stems, to prepare timeplots of development
+            datetime_year = datetime(int(start_year + length_timeperiod / 2 - 1), 1, 1, 0, 0, 0, 0).toordinal()
+            datetime_start_year = datetime(int(start_year), 1, 1, 0, 0, 0, 0).toordinal()
+            datetime_final_year = datetime(int(final_year), 1, 1, 0, 0, 0, 0).toordinal()
+            time_coord = iris.coords.AuxCoord(datetime_year,
+                                              long_name='scenario_year',
+                                              units=cf_units.Unit('days since 1-01-01', calendar='proleptic_gregorian'),
+                                              bounds=(datetime_start_year, datetime_final_year))
 
-        for i_model in models:
-            # TODO: balanced approach to get reference period with equally weighted rolling window decades, for now: just average the consecutive decades
-            reference_data[i_model] = quantile_collection(ref_results[i_model],
-                                                          reference_scenario, reference_start_year,
-                                                          reference_final_year, length_timeperiod, rolling_window=False)
-            data[i_model] = quantile_collection(results[i_model], data_scenario, start_year, final_year,
-                                                length_timeperiod, rolling_window=rolling_window)
-            baseline[i_model] = reference_data[i_model]['quantiles'][quantile_key, quantile_to_calculate]
-            ref_mean[i_model] = reference_data[i_model]['quantiles']['mean']
-            data_mean[i_model] = data[i_model]['quantiles']['mean']
+            for i_model in models:
+                # TODO: balanced approach to get reference period with equally weighted rolling window decades, for now: just average the consecutive decades
+                reference_data[i_model] = quantile_collection(ref_results[i_model],
+                                                              reference_scenario, reference_start_year,
+                                                              reference_final_year, length_timeperiod, rolling_window=False)
+                data[i_model] = quantile_collection(results[i_model], data_scenario, start_year, final_year,
+                                                    length_timeperiod, rolling_window=rolling_window)
+                baseline[i_model] = reference_data[i_model]['quantiles'][quantile_key, quantile_to_calculate]
+                ref_mean[i_model] = reference_data[i_model]['quantiles']['mean']
+                data_mean[i_model] = data[i_model]['quantiles']['mean']
 
-            quantile_dict[i_model] = data[i_model]['quantiles'][quantile_key, quantile_to_calculate]
+                quantile_dict[i_model] = data[i_model]['quantiles'][quantile_key, quantile_to_calculate]
 
-            ref_frequency[i_model] = reference_data[i_model]['quantiles'][frequency_key, quantile_to_calculate]
+                ref_frequency[i_model] = reference_data[i_model]['quantiles'][frequency_key, quantile_to_calculate]
 
-            ref_expected_snowfall[i_model] = reference_data[i_model]['quantiles'][
-                mean_exceedance_key, quantile_to_calculate]
-            ref_expected_snowfall[i_model].units = baseline[i_model].units
-            ref_expected_snowfall[i_model] = reference_data[i_model]['quantiles'][
-                                                 mean_exceedance_key, quantile_to_calculate] + baseline[i_model]
+                ref_expected_snowfall[i_model] = reference_data[i_model]['quantiles'][
+                    mean_exceedance_key, quantile_to_calculate]
+                ref_expected_snowfall[i_model].units = baseline[i_model].units
+                ref_expected_snowfall[i_model] = reference_data[i_model]['quantiles'][
+                                                     mean_exceedance_key, quantile_to_calculate] + baseline[i_model]
 
-            data_frequency[i_model] = data[i_model]['quantiles'][frequency_key, quantile_to_calculate]
-            data_expected_snowfall[i_model] = data[i_model]['quantiles'][mean_exceedance_key, quantile_to_calculate]
-            data_expected_snowfall[i_model].units = baseline[i_model].units
-            data_expected_snowfall[i_model] = data[i_model]['quantiles'][mean_exceedance_key, quantile_to_calculate] + baseline[i_model]
-
-        unmasked_ref_mean = ensemble_average(models, ref_mean)
-        unmasked_data_mean = ensemble_average(models, data_mean)
-
-        # get ocean mask TODO: flexible per model
-        maskfile = open('/p/tmp/quante/ExtremeEventEvaluation/ocean_mask_110', 'rb')
-        ocean_mask = pickle.load(maskfile)
-        ocean_masked_ref_mean_average = iris.util.mask_cube(unmasked_ref_mean, ocean_mask)
-        np.ma.filled(ocean_masked_ref_mean_average, np.nan)
-        # generate mask for values in decentiles of meanTODO: generalization might be useful
-        percentile_thresholds = [(0,100),(0,50),(33,100),(25,100),(0,10),(10,20),(30,40),(40,50),(50,100),(50,60) ,(60, 70),(70,80),(80,90),(90,100)]
-        for i_percentile_threshold in percentile_thresholds:
-            unmasked_baseline = ensemble_average(models, baseline)
-            unmasked_percentile = ensemble_average(models, quantile_dict)
+                data_frequency[i_model] = data[i_model]['quantiles'][frequency_key, quantile_to_calculate]
+                data_expected_snowfall[i_model] = data[i_model]['quantiles'][mean_exceedance_key, quantile_to_calculate]
+                data_expected_snowfall[i_model].units = baseline[i_model].units
+                data_expected_snowfall[i_model] = data[i_model]['quantiles'][mean_exceedance_key, quantile_to_calculate] + baseline[i_model]
 
             unmasked_ref_mean = ensemble_average(models, ref_mean)
             unmasked_data_mean = ensemble_average(models, data_mean)
 
-            unmasked_ref_frequency = ensemble_average(models, ref_frequency)
-            unmasked_data_frequency = ensemble_average(models, data_frequency)
+            # get ocean mask TODO: flexible per model
+            maskfile = open('/p/tmp/quante/ExtremeEventEvaluation/ocean_mask_110', 'rb')
+            ocean_mask = pickle.load(maskfile)
+            ocean_masked_ref_mean_average = iris.util.mask_cube(unmasked_ref_mean, ocean_mask)
+            np.ma.filled(ocean_masked_ref_mean_average, np.nan)
+            # generate mask for values in decentiles of meanTODO: generalization might be useful
+            percentile_thresholds = [(0,100),(0,50),(33,100),(25,100),(0,10),(10,20),(30,40),(40,50),(50,100),(50,60) ,(60, 70),(70,80),(80,90),(90,100)]
+            for i_percentile_threshold in percentile_thresholds:
+                unmasked_baseline = ensemble_average(models, baseline)
+                unmasked_percentile = ensemble_average(models, quantile_dict)
 
-            unmasked_ref_expected_snowfall = ensemble_average(models, ref_expected_snowfall)
-            unmasked_data_expected_snowfall = ensemble_average(models, data_expected_snowfall)
+                unmasked_ref_mean = ensemble_average(models, ref_mean)
+                unmasked_data_mean = ensemble_average(models, data_mean)
 
-            lower_bound = np.nanpercentile(ocean_masked_ref_mean_average.data, i_percentile_threshold[0])
-            upper_bound = np.nanpercentile(ocean_masked_ref_mean_average.data, i_percentile_threshold[1])
-            ref_relevance_mask = np.logical_or(ocean_masked_ref_mean_average.data <= lower_bound,
-                                               ocean_masked_ref_mean_average.data > upper_bound)
+                unmasked_ref_frequency = ensemble_average(models, ref_frequency)
+                unmasked_data_frequency = ensemble_average(models, data_frequency)
 
-            ref_mean_average[i_start_year] = iris.util.mask_cube(unmasked_ref_mean, ref_relevance_mask)
-            data_mean_average[i_start_year] = iris.util.mask_cube(unmasked_data_mean, ref_relevance_mask)
+                unmasked_ref_expected_snowfall = ensemble_average(models, ref_expected_snowfall)
+                unmasked_data_expected_snowfall = ensemble_average(models, data_expected_snowfall)
 
-            mean_ratios[start_year] = data_mean_average[i_start_year] / ref_mean_average[i_start_year]
-            mean_ratios[start_year].add_aux_coord(time_coord)
+                lower_bound = np.nanpercentile(ocean_masked_ref_mean_average.data, i_percentile_threshold[0])
+                upper_bound = np.nanpercentile(ocean_masked_ref_mean_average.data, i_percentile_threshold[1])
+                ref_relevance_mask = np.logical_or(ocean_masked_ref_mean_average.data <= lower_bound,
+                                                   ocean_masked_ref_mean_average.data > upper_bound)
 
-            quantile_average[i_start_year] = iris.util.mask_cube(unmasked_percentile, ref_relevance_mask)
-            baseline_average[i_start_year] = iris.util.mask_cube(unmasked_baseline, ref_relevance_mask)
+                ref_mean_average[i_start_year] = iris.util.mask_cube(unmasked_ref_mean, ref_relevance_mask)
+                data_mean_average[i_start_year] = iris.util.mask_cube(unmasked_data_mean, ref_relevance_mask)
 
-            quantile_baseline_ratio[i_start_year] = quantile_average[i_start_year] / baseline_average[i_start_year]
-            quantile_baseline_ratio[i_start_year].add_aux_coord(time_coord)
+                mean_ratios[start_year] = data_mean_average[i_start_year] / ref_mean_average[i_start_year]
+                mean_ratios[start_year].add_aux_coord(time_coord)
 
-            ref_frequency_average[i_start_year] = iris.util.mask_cube(unmasked_ref_frequency, ref_relevance_mask)
-            data_frequency_average[i_start_year] = iris.util.mask_cube(unmasked_data_frequency, ref_relevance_mask)
-            frequency_ratios[i_start_year] = data_frequency_average[i_start_year] / ref_frequency_average[i_start_year]
-            frequency_ratios[i_start_year].add_aux_coord(time_coord)
+                quantile_average[i_start_year] = iris.util.mask_cube(unmasked_percentile, ref_relevance_mask)
+                baseline_average[i_start_year] = iris.util.mask_cube(unmasked_baseline, ref_relevance_mask)
 
-            ref_expected_snowfall_average[i_start_year] = iris.util.mask_cube(unmasked_ref_expected_snowfall, ref_relevance_mask)
-            data_expected_snowfall_average[i_start_year] = iris.util.mask_cube(unmasked_data_expected_snowfall, ref_relevance_mask)
+                quantile_baseline_ratio[i_start_year] = quantile_average[i_start_year] / baseline_average[i_start_year]
+                quantile_baseline_ratio[i_start_year].add_aux_coord(time_coord)
 
-            expected_snowfall_ratio[i_start_year] = data_expected_snowfall_average[i_start_year] / ref_expected_snowfall_average[i_start_year]
-            expected_snowfall_ratio[i_start_year].add_aux_coord(time_coord)
+                ref_frequency_average[i_start_year] = iris.util.mask_cube(unmasked_ref_frequency, ref_relevance_mask)
+                data_frequency_average[i_start_year] = iris.util.mask_cube(unmasked_data_frequency, ref_relevance_mask)
+                frequency_ratios[i_start_year] = data_frequency_average[i_start_year] / ref_frequency_average[i_start_year]
+                frequency_ratios[i_start_year].add_aux_coord(time_coord)
+
+                ref_expected_snowfall_average[i_start_year] = iris.util.mask_cube(unmasked_ref_expected_snowfall, ref_relevance_mask)
+                data_expected_snowfall_average[i_start_year] = iris.util.mask_cube(unmasked_data_expected_snowfall, ref_relevance_mask)
+
+                expected_snowfall_ratio[i_start_year] = data_expected_snowfall_average[i_start_year] / ref_expected_snowfall_average[i_start_year]
+                expected_snowfall_ratio[i_start_year].add_aux_coord(time_coord)
 
 
-            dict_to_plot[quantile_to_calculate, i_start_year, 'mean', i_percentile_threshold] = mean_ratios[
-                i_start_year]
-            dict_to_plot[quantile_to_calculate, i_start_year, 'frequency', i_percentile_threshold] = frequency_ratios[
-                i_start_year]
-            dict_to_plot[quantile_to_calculate, i_start_year, 'percentile', i_percentile_threshold] = \
-                quantile_baseline_ratio[i_start_year]
-            dict_to_plot[quantile_to_calculate, i_start_year, 'es', i_percentile_threshold] = expected_snowfall_ratio[
-                i_start_year]
+                dict_to_plot[quantile_to_calculate, i_start_year, 'mean', i_percentile_threshold] = mean_ratios[
+                    i_start_year]
+                dict_to_plot[quantile_to_calculate, i_start_year, 'frequency', i_percentile_threshold] = frequency_ratios[
+                    i_start_year]
+                dict_to_plot[quantile_to_calculate, i_start_year, 'percentile', i_percentile_threshold] = \
+                    quantile_baseline_ratio[i_start_year]
+                dict_to_plot[quantile_to_calculate, i_start_year, 'es', i_percentile_threshold] = expected_snowfall_ratio[
+                    i_start_year]
 
-            dict_to_plot[
-                quantile_to_calculate, i_start_year, 'frequency', i_percentile_threshold].var_name = 'frequency_'+str(i_percentile_threshold[0])+"_"+str(i_percentile_threshold[1])
-            dict_to_plot[quantile_to_calculate, i_start_year, 'percentile', i_percentile_threshold].var_name = 'percentile_'+str(i_percentile_threshold[0])+"_"+str(i_percentile_threshold[1])
-            dict_to_plot[quantile_to_calculate, i_start_year, 'es', i_percentile_threshold].var_name = 'EES_'+str(i_percentile_threshold[0])+"_"+str(i_percentile_threshold[1])
-            dict_to_plot[quantile_to_calculate, i_start_year, 'mean', i_percentile_threshold].var_name = 'mean_'+str(i_percentile_threshold[0])+"_"+str(i_percentile_threshold[1])
+                dict_to_plot[
+                    quantile_to_calculate, i_start_year, 'frequency', i_percentile_threshold].var_name = 'frequency_'+str(i_percentile_threshold[0])+"_"+str(i_percentile_threshold[1])
+                dict_to_plot[quantile_to_calculate, i_start_year, 'percentile', i_percentile_threshold].var_name = 'percentile_'+str(i_percentile_threshold[0])+"_"+str(i_percentile_threshold[1])
+                dict_to_plot[quantile_to_calculate, i_start_year, 'es', i_percentile_threshold].var_name = 'EES_'+str(i_percentile_threshold[0])+"_"+str(i_percentile_threshold[1])
+                dict_to_plot[quantile_to_calculate, i_start_year, 'mean', i_percentile_threshold].var_name = 'mean_'+str(i_percentile_threshold[0])+"_"+str(i_percentile_threshold[1])
     return dict_to_plot
 
 
@@ -471,20 +472,13 @@ def ensemble_plotting_average(models, data_scenarios, data_to_calculate, data_re
 
     reference_scenarios = ['historical']
     plotting_data = {}
-    for i_datapoint in data_to_calculate:
-        for i_scenario in data_scenarios:
-            for i_reference_scenario in reference_scenarios:
-                if temperature:
-                    plotting_data[str(i_datapoint), i_scenario, i_reference_scenario] = ensemble_average_temperature(
-                        i_datapoint, models, 'ensemble', ensemble_results, ref_ensemble_results, i_scenario,
-                        starting_years, length_timerperiod,
-                        i_reference_scenario, baseline_start, baseline_end, rolling_window=rolling_window)
-                else:
-                    plotting_data[i_datapoint, i_scenario, i_reference_scenario] = ensemble_average_quantile_baseline(
-                        i_datapoint, models, 'ensemble', ensemble_results, ref_ensemble_results, i_scenario,
-                        starting_years, length_timerperiod,
-                        i_reference_scenario, baseline_start, baseline_end, rolling_window=rolling_window)
 
+    for i_scenario in data_scenarios:
+        for i_reference_scenario in reference_scenarios:
+                plotting_data[i_scenario, i_reference_scenario] = ensemble_average_quantile_baseline(
+                    data_to_calculate, models, 'ensemble', ensemble_results, ref_ensemble_results, i_scenario,
+                    starting_years, length_timerperiod,
+                    i_reference_scenario, baseline_start, baseline_end, rolling_window=rolling_window)
     return plotting_data
 
 
@@ -569,9 +563,8 @@ for i_start_years in tqdm(start_years):
                                                                     rolling_window=rolling_window,
                                                                     temperature=temperature)
     for i_key in tqdm(cache_plotting_data[areanames[0]].keys()):
-        datapoint = i_key[0]
-        scenario = i_key[1]
-        ref_scenario = i_key[2]
+        scenario = i_key[0]
+        ref_scenario = i_key[1]
         global_plotting_data = {}
         for i_second_key in tqdm(cache_plotting_data[areanames[0]][i_key]):
             partial_data_cubelist = iris.cube.CubeList()
@@ -589,11 +582,11 @@ for i_start_years in tqdm(start_years):
         max_start_year = np.max(start_years)
 
         filename = 'snow_stats_' + str(ensemble_name) + "_" + str('global') + "_" + str('preindustrial') + "_" + str(
-            scenario) + "_" + str(ref_scenario) + "_" + str(datapoint) + "_" + str(min_start_year) + "_" + str(
+            scenario) + "_" + str(ref_scenario) + "_" + str(datapoints) + "_" + str(min_start_year) + "_" + str(
             max_start_year) + "_" + str(rolling_window)
         if temperature:
             filename = 'snow_temperature_stats_' + str(ensemble_name) + "_" + str('global') + "_" + str(
-                'preindustrial') + "_" + str(scenario) + "_" + str(ref_scenario) + "_" + str(datapoint) + "_" + str(
+                'preindustrial') + "_" + str(scenario) + "_" + str(ref_scenario) + "_" + str(datapoints) + "_" + str(
                 min_start_year) \
                        + "_" + str(max_start_year) + "_" + str(rolling_window)
         file = open(filename, 'wb')
