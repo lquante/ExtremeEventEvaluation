@@ -649,7 +649,7 @@ ssp_scenarios = settings['ssp_scenarios']
 percentiles = settings['percentiles']
 timeperiod_length = settings ['timeperiod_length']
 number_of_ssp_periods = int(80/timeperiod_length)
-number_of_historical_periods = int(120/timeperiod_length)
+
 baseline_start = int(settings['baseline_start'])
 
 baseline = int(settings['baseline'])
@@ -657,6 +657,8 @@ baseline = int(settings['baseline'])
 baseline_periods = settings ['baseline_periods']
 baseline_end = baseline_start + baseline_periods * timeperiod_length - 1
 baseline_decades = int((baseline_end - baseline_start + 1) / 10)
+
+number_of_historical_periods = int((2010-baseline_end)/timeperiod_length)
 
 full_historical = int(settings['full_historical'])
 scenario_analysis = int(settings['scenario_analysis'])
