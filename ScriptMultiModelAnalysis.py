@@ -594,7 +594,7 @@ def simulation_runner(models):
         if (baseline == 1):
             multi_region_threshold_analysis_preindustrial(prsn_cubes, models, arealist, 'historical', baseline_start,
                                                           baseline_start,
-                                                          timeperiod_length, 1, percentiles, historical=False,
+                                                          timeperiod_length, baseline_periods, percentiles, historical=False,
                                                           rolling_window=rolling_window, ensemble=ensemble_boolean,
                                                           ensemblename=identifier_ensemble)
         if (scenario_analysis == 1):
