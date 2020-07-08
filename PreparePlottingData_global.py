@@ -263,9 +263,9 @@ def ensemble_average_quantile_baseline(quantiles_to_calculate, models, ensemblen
                     i_start_year]
 
                 dict_to_plot[
-                    quantile_to_calculate, i_start_year, 'frequency', i_percentile_threshold].var_name = 'frequency_'+str(i_percentile_threshold[0])+"_"+str(i_percentile_threshold[1])
-                dict_to_plot[quantile_to_calculate, i_start_year, 'percentile', i_percentile_threshold].var_name = 'percentile_'+str(i_percentile_threshold[0])+"_"+str(i_percentile_threshold[1])
-                dict_to_plot[quantile_to_calculate, i_start_year, 'es', i_percentile_threshold].var_name = 'EES_'+str(i_percentile_threshold[0])+"_"+str(i_percentile_threshold[1])
+                    quantile_to_calculate, i_start_year, 'frequency', i_percentile_threshold].var_name = 'frequency_'+str(quantile_to_calculate)+'_'+str(i_percentile_threshold[0])+"_"+str(i_percentile_threshold[1])
+                dict_to_plot[quantile_to_calculate, i_start_year, 'percentile', i_percentile_threshold].var_name = 'percentile_'+str(quantile_to_calculate)+'_'+str(i_percentile_threshold[0])+"_"+str(i_percentile_threshold[1])
+                dict_to_plot[quantile_to_calculate, i_start_year, 'es', i_percentile_threshold].var_name = 'EES_'+str(quantile_to_calculate)+'_'+str(i_percentile_threshold[0])+"_"+str(i_percentile_threshold[1])
                 dict_to_plot[quantile_to_calculate, i_start_year, 'mean', i_percentile_threshold].var_name = 'mean_'+str(i_percentile_threshold[0])+"_"+str(i_percentile_threshold[1])
     return dict_to_plot
 

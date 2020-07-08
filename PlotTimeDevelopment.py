@@ -614,9 +614,8 @@ def plot_development_multiple_scenarios(ylims, modelname, filelist_dict, arealis
 
 def plot_development_single_scenario(ylims, modelname, filelist, arealist, areanames, scenario, datapoint
                                      , maps=True, temperature=False):
-    label_frequency = 'days with daily snowfall > baseline'
+
     label_es = 'expected excess snowfall > baseline (mm)'
-    label_es_diff = 'difference of ' + label_es
 
     data_to_plot = {}
     for i_file in filelist:
