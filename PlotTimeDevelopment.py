@@ -501,116 +501,140 @@ def import_unify(file, cubelists, data_to_plot, maskpath):
     return extended_list
 
 
-def plot_development_multiple_scenarios(ylims, modelname, filelist_dict, arealist, areanames, scenarios, datapoint
-                                        , temperature=False, maps=False):
-    label_frequency = 'days with daily snowfall > baseline'
-    label_es = 'expected excess snowfall > baseline (mm)'
-    label_es_diff = 'difference of ' + label_es
-    scenario_data = {}
+def plot_development_multiple_scenarios(ylims, modelname, filelist_dict, arealist, areanames, scenarios, datapoints
+                                        ,temperature=False, maps=False,EES_level_curves=False):
 
-    for i_scenario in scenarios:
-        data_to_plot = {}
-        for i_file in filelist_dict[i_scenario]:
-            with open(i_file, 'rb') as stream:
-                data_to_plot[i_file] = (pickle.load(stream))
-        scenario_data[i_scenario] = data_to_plot
-
-    frequency_ratio_key = 'frequency'
-    quantile_ratio_key = 'percentile'
-    es_ratio_key = 'EES'
-    mean_ratio_key = 'mean'
-
-    if temperature:
-        days_between_temperature_key = 'days_between_temperature'
-        mean_snow_between_temperature_key = 'mean_snow_between_temperature'
-        mean_pr_ratio_key = 'mean_precipitation'
-        percentile_pr_ratio_key = 'pr_percentile_99.9'
-        snow_between_percentile_key = 'snow_between_' + str(np.min(datapoint)) + '_' + str(
-            np.max(datapoint)) + 'K_percentile_99.9'
-
-    # prepare time series of interesting phenomenoms by concatening all cubes:
-    scenario_cubelists = {}
-    cubelists = {}
-
-    for i_scenario in scenarios:
-        all_files = iris.cube.CubeList()
-        results_cache = []
-        for i_file in filelist_dict[i_scenario]:
-            results_cache.append(import_unify(i_file, cubelists, scenario_data[i_scenario], maskfiles[i_scenario]))
-
-        for i_extended_list in results_cache:
-            for i_cube in i_extended_list:
-                all_files.append(i_cube)
-
-        all_files_concatenated = all_files.concatenate()
-        print(all_files_concatenated)
-        scenario_cubelists[i_scenario] = all_files_concatenated
-
-    population_cubes = {}
-
-    area_cubes = {}
-    i = 0
-    for i_area in arealist:
-        scenario_area_data = {}
+        # prepare time series of interesting phenomenoms by concatening all cubes:
+        scenario_cubelists = {}
+        cubelists = {}
+        scenario_data = {}
         for i_scenario in scenarios:
-            scenario_area_data[i_scenario] = iris.cube.CubeList()
-            for i_cube in scenario_cubelists[i_scenario]:
-                area_cube = cube_from_bounding_box(i_cube, i_area)
-                population_cube = cube_from_bounding_box(current_population, i_area)
-                scenario_area_data[i_scenario].append(area_cube)
-                population_cubes[areanames[i]] = (population_cube)
-        area_cubes[areanames[i]] = scenario_area_data
-        i = i + 1
-    if temperature:
-        ratios = [days_between_temperature_key, mean_snow_between_temperature_key,
-                  percentile_pr_ratio_key, snow_between_percentile_key]
-    else:
+            data_to_plot = {}
+            for i_file in filelist_dict[i_scenario]:
+                with open(i_file, 'rb') as stream:
+                    data_to_plot[i_file] = (pickle.load(stream))
+            scenario_data[i_scenario] = data_to_plot
+        for i_scenario in scenarios:
+            all_files = iris.cube.CubeList()
+            results_cache = []
+            for i_file in filelist_dict[i_scenario]:
+                results_cache.append(import_unify(i_file, cubelists, scenario_data[i_scenario], maskfiles[i_scenario]))
 
-        variable_keys = [mean_ratio_key, es_ratio_key, quantile_ratio_key]
+            for i_extended_list in results_cache:
+                for i_cube in i_extended_list:
+                    all_files.append(i_cube)
 
-        percentile_bins = [(0,50),(50,100),(33,100),(25,100)]
+            all_files_concatenated = all_files.concatenate()
+            print(all_files_concatenated)
+            scenario_cubelists[i_scenario] = all_files_concatenated
 
-    # level_bins = [(0,10),(10,20),(30,40),(40,50),(50,60),(60, 70),(70,80),(80,90),(90,100)]
-    # # plot summary map for levels of bins:
-    # level_sample_key = 'mean'
-    # levelnames = []
-    # for i_bin in level_bins:
-    #     levelnames.append(level_sample_key + "_" + str(i_bin[0]) + "_" + str(i_bin[1]))
-    # for i_scenario in scenarios:
-    #     levelcubes = {}
-    #     for i_cube in scenario_cubelists[i_scenario]:
-    #         if (i_cube.var_name in levelnames):
-    #             levelcubes[i_cube.var_name] = i_cube
-    #     print(levelcubes)
-    #     plot_levels('mean_decentiles', levelcubes, i_scenario)
+        population_cubes = {}
 
-
-    for i_bin in percentile_bins:
-        ratios = []
-        for i_variable in variable_keys:
-                ratios.append(i_variable + "_" + str(i_bin[0]) + "_" + str(i_bin[1]))
-
-        # for i_area in areanames:
-        #     # test population weighting
-        #     print(i_area)
-        #     if populationweighting:
-        #         plot_multiple_variables_multiple_scenario(ylims, area_cubes[i_area], str(i_area + '_population_weighted'),
-        #                                                   ratios,
-        #                                                   modelname + "_population_weighted",
-        #                                                   i_area, scenarios, scenario_colors, datapoint,
-        #                                                   population=population_cubes[i_area],
-        #                                                   temperature=temperature)
-        #         print(i_area + "population finished")
-        #     plot_multiple_variables_multiple_scenario(ylims, area_cubes[i_area], str(i_area + '_ratios_'+ str(i_bin[0]) + "_" + str(i_bin[1])), ratios, modelname,
-        #                                               i_area, scenarios, scenario_colors, datapoint,
-        #                                               temperature=temperature)
-        if maps:
-
+        area_cubes = {}
+        i = 0
+        for i_area in arealist:
+            scenario_area_data = {}
             for i_scenario in scenarios:
-                plot_min_max_maps(scenario_cubelists[i_scenario],ratios, 'NORTHERN_HEMISPHERE', i_scenario, modelname,
-                                         datapoint)
-                plot_start_end_maps(scenario_cubelists[i_scenario], ratios, 'NORTHERN_HEMISPHERE', i_scenario, modelname,
-                                  datapoint)
+                scenario_area_data[i_scenario] = iris.cube.CubeList()
+                for i_cube in scenario_cubelists[i_scenario]:
+                    area_cube = cube_from_bounding_box(i_cube, i_area)
+                    population_cube = cube_from_bounding_box(current_population, i_area)
+                    scenario_area_data[i_scenario].append(area_cube)
+                    population_cubes[areanames[i]] = (population_cube)
+            area_cubes[areanames[i]] = scenario_area_data
+            i = i + 1
+
+        for i_datapoint in datapoints:
+            frequency_ratio_key = 'frequency_' + str(i_datapoint)
+            quantile_ratio_key = 'percentile_' + str(i_datapoint)
+            es_ratio_key = 'EES_' + str(i_datapoint)
+            mean_ratio_key = 'mean'
+
+            if temperature:
+                days_between_temperature_key = 'days_between_temperature'
+                mean_snow_between_temperature_key = 'mean_snow_between_temperature'
+                mean_pr_ratio_key = 'mean_precipitation'
+                percentile_pr_ratio_key = 'pr_percentile_99.9'
+                snow_between_percentile_key = 'snow_between_' + str(np.min(i_datapoint)) + '_' + str(
+                    np.max(i_datapoint)) + 'K_percentile_99.9'
+
+            if temperature:
+                ratios = [days_between_temperature_key, mean_snow_between_temperature_key,
+                          percentile_pr_ratio_key, snow_between_percentile_key]
+            else:
+
+                variable_keys = [mean_ratio_key, es_ratio_key, quantile_ratio_key]
+
+                percentile_bins = [(0,50),(50,100),(33,100),(25,100)]
+
+            level_bins = [(0,10),(10,20),(30,40),(40,50),(50,60),(60, 70),(70,80),(80,90),(90,100)]
+            # plot summary map for levels of bins:
+            level_sample_key = 'mean'
+            levelnames = []
+            for i_bin in level_bins:
+                levelnames.append(level_sample_key + "_" + str(i_bin[0]) + "_" + str(i_bin[1]))
+            for i_scenario in scenarios:
+                levelcubes = {}
+                for i_cube in scenario_cubelists[i_scenario]:
+                    if (i_cube.var_name in levelnames):
+                        levelcubes[i_cube.var_name] = i_cube
+                print(levelcubes)
+                plot_levels('mean_decentiles', levelcubes, i_scenario)
+
+
+            for i_bin in percentile_bins:
+                ratios = []
+                for i_variable in variable_keys:
+                        ratios.append(i_variable + "_" + str(i_bin[0]) + "_" + str(i_bin[1]))
+
+                for i_area in areanames:
+                    # test population weighting
+                    print(i_area)
+                    if populationweighting:
+                        plot_multiple_variables_multiple_scenario(ylims, area_cubes[i_area], str(i_area + '_population_weighted'),
+                                                                  ratios,
+                                                                  modelname + "_population_weighted",
+                                                                  i_area, scenarios, scenario_colors, i_datapoint,
+                                                                  population=population_cubes[i_area],
+                                                                  temperature=temperature)
+                        print(i_area + "population finished")
+                    plot_multiple_variables_multiple_scenario(ylims, area_cubes[i_area], str(i_area + '_ratios_'+ str(i_bin[0]) + "_" + str(i_bin[1])), ratios, modelname,
+                                                              i_area, scenarios, scenario_colors, i_datapoint,
+                                                              temperature=temperature)
+                if maps:
+
+                    for i_scenario in scenarios:
+                        plot_min_max_maps(scenario_cubelists[i_scenario],ratios, 'NORTHERN_HEMISPHERE', i_scenario, modelname,
+                                                 i_datapoint)
+                        plot_start_end_maps(scenario_cubelists[i_scenario], ratios, 'NORTHERN_HEMISPHERE', i_scenario, modelname,
+                                          i_datapoint)
+        # optional analysis of development of different levels of ees in parallel to identify switch of sign of EES trend
+        if EES_level_curves:
+            levels = datapoints # possible to extend by excluding specific levels
+            keys = []
+            for i_level in levels:
+                es_ratio_key = 'EES_' + str(i_level)
+                keys.append(es_ratio_key)
+            for i_scenario in scenarios:
+                ees_cubes = {}
+                for i_cube in scenario_cubelists[i_scenario]:
+                    if (i_cube.var_name in keys):
+                        ees_cubes[i_cube.var_name[4:]]=i_cube # get percentile as key for dict
+                print(ees_cubes)
+                timepoints = ees_cubes[keys[0]].coord('scenario_year').cells()
+                for i_timepoint in timepoints:
+                    year_constraint = iris.Constraint(scenario_year=i_timepoint)
+                    x_y_data = []
+                    # calculate datapoints for plotting
+                    for i_key in ees_cubes.keys():
+                        timecube = ees_cubes[i_key].extract(year_constraint)
+                        weights = generate_weights(timecube, population=False)
+                        average = timecube.collapsed(('latitude','longitude'),iris.analysis.MEAN,weights=weights).data
+                        x_y_data.append((int(i_key,average)))
+                    year = i_timepoint[0].year
+                    plt.plot(x_y_data,title="EES trend curve "+str(year))
+                    plt.savefig(i_scenario+ '_' + year + '_' + "EES_trend_curve"+'.png', dpi=300, bbox_inches='tight')
+                    plt.close()
 
 def plot_development_single_scenario(ylims, modelname, filelist, arealist, areanames, scenario, datapoint
                                      , maps=True, temperature=False):
