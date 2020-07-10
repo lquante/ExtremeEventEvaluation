@@ -118,30 +118,34 @@ def plot_difference_cube(cube, scenario_data, model, quantile, startyear_data, f
 
     ax.coastlines('110m')
     ax.gridlines()
-    # https: // scitools.org.uk / cartopy / docs / latest / gallery / always_circular_stereo.html?highlight = circular
-    # Compute a circle in axes coordinates, which we can use as a boundary
-    # for the map. We can pan/zoom as much as we like - the boundary will be
-    # permanently circular.
-    theta = np.linspace(0, 2 * np.pi, 100)
-    center, radius = [0.5, 0.5], 0.5
-    verts = np.vstack([np.sin(theta), np.cos(theta)]).T
-    circle = mpath.Path(verts * radius + center)
-    ax.set_boundary(circle, transform=plt.gca().transAxes)
+    # # https: // scitools.org.uk / cartopy / docs / latest / gallery / always_circular_stereo.html?highlight = circular
+    # # Compute a circle in axes coordinates, which we can use as a boundary
+    # # for the map. We can pan/zoom as much as we like - the boundary will be
+    # # permanently circular.
+    # theta = np.linspace(0, 2 * np.pi, 100)
+    # center, radius = [0.5, 0.5], 0.5
+    # verts = np.vstack([np.sin(theta), np.cos(theta)]).T
+    # circle = mpath.Path(verts * radius + center)
+    # ax.set_boundary(circle, transform=plt.gca().transAxes)
 
-    plt.colorbar(pcm, shrink=0.7, extend='both', orientation='horizontal', label=label)
+    plt.colorbar(pcm, shrink=0.7, extend='both', orientation='horizontal') # label + title to be added in tex
 
-    plt.title(
-        model + " percentile: " + str(quantile) + "\n" + scenario_data + ": " + str(startyear_data) + " to " + str(
-            finalyear_data) +
-        scenario_comparison + ": " + str(startyear_comparison) + " to " + str(finalyear_comparison), fontsize=10)
+    # plt.title(
+    #     model + " percentile: " + str(quantile) + "\n" + scenario_data + ": " + str(startyear_data) + " to " + str(
+    #         finalyear_data) +
+    #     scenario_comparison + ": " + str(startyear_comparison) + " to " + str(finalyear_comparison), fontsize=10)
 
 
 def plot_ratio_cube(cube, scenario_data, modelname, quantile, startyear_data, finalyear_data, scenario_comparison,
                     startyear_comparison,
-                    finalyear_comparison, projection, label, vmin=0, vmax=2):
+                    finalyear_comparison, projection, label, vmin=0, vmax=2,contour=False):
     colormap = plt.get_cmap('RdBu_r', 30)
     ax = plt.axes(projection=projection)
-    pcm = iris.plot.pcolormesh(cube, cmap=colormap, vmin=vmin, vmax=vmax)
+    if contour:
+        levels = range(-30,35,5)
+        pcm = iris.plot.contourf(cube,levels=levels,cmap=colormap,extend='both')
+    else:
+        pcm = iris.plot.pcolormesh(cube, cmap=colormap, vmin=vmin, vmax=vmax)
 
     ax.coastlines('110m')
     ax.gridlines()
@@ -150,17 +154,17 @@ def plot_ratio_cube(cube, scenario_data, modelname, quantile, startyear_data, fi
     # Compute a circle in axes coordinates, which we can use as a boundary
     # for the map. We can pan/zoom as much as we like - the boundary will be
     # permanently circular.
-    theta = np.linspace(0, 2 * np.pi, 100)
-    center, radius = [0.5, 0.5], 0.5
-    verts = np.vstack([np.sin(theta), np.cos(theta)]).T
-    circle = mpath.Path(verts * radius + center)
-    ax.set_boundary(circle, transform=plt.gca().transAxes)
+    # theta = np.linspace(0, 2 * np.pi, 100)
+    # center, radius = [0.5, 0.5], 0.5
+    # verts = np.vstack([np.sin(theta), np.cos(theta)]).T
+    # circle = mpath.Path(verts * radius + center)
+    # ax.set_boundary(circle, transform=plt.gca().transAxes)
 
-    plt.colorbar(pcm, shrink=0.7, extend='both', orientation='horizontal', label=label)
+    plt.colorbar(pcm, shrink=0.7, extend='both', orientation='horizontal')# label + title to be added in tex
 
-    plt.title(modelname + " percentile: " + str(quantile) + "\n" + " " + scenario_data + ": " + str(
-        startyear_data) + " to " + str(finalyear_data) + ' ' +
-              scenario_comparison + ": " + str(startyear_comparison) + " to " + str(finalyear_comparison), fontsize=10)
+    # plt.title(modelname + " percentile: " + str(quantile) + "\n" + " " + scenario_data + ": " + str(
+    #     startyear_data) + " to " + str(finalyear_data) + ' ' +
+    #           scenario_comparison + ": " + str(startyear_comparison) + " to " + str(finalyear_comparison), fontsize=10)
 
 
 def plot_cubelist_ratio_maps(cubelist,varnames, filename, scenario, modelname, quantile):
@@ -175,7 +179,7 @@ def plot_cubelist_ratio_maps(cubelist,varnames, filename, scenario, modelname, q
                 start_year = year - 4
                 final_year = year + 5
 
-                projection = cartopy.crs.AzimuthalEquidistant(central_latitude=90)
+
                 plot_ratio_cube(time_cube, scenario, modelname, quantile, start_year, final_year, 'historical',
                                 reference_start_year, reference_final_year,
                                 projection,
@@ -186,61 +190,112 @@ def plot_cubelist_ratio_maps(cubelist,varnames, filename, scenario, modelname, q
                     dpi=300, bbox_inches='tight')
                 plt.close()
 
-def plot_min_max_maps(cubelist,varnames, filename, scenario, modelname, quantile):
+def plot_min_max_maps(cubelist,varnames, filename, scenario, modelname, quantile,mask=None):
     for i_cube in cubelist:
         if i_cube.var_name in varnames:
             max_cube = i_cube.collapsed ('scenario_year',iris.analysis.MAX)
             min_cube = i_cube.collapsed ('scenario_year',iris.analysis.MIN)
-            diff_cube = max_cube-min_cube
+            diff_cube = (max_cube-min_cube)*100
             diff_cube.var_name = i_cube.var_name+"_max-min"
-            projection = cartopy.crs.AzimuthalEquidistant(central_latitude=90)
+
+            # mask with mask data
+            if mask is None:
+                z = 1 + 1
+            else:
+                diff_cube = iris.util.mask_cube(diff_cube, mask)
+
+
             start_year = 2021
             final_year = 2100
             plot_ratio_cube(diff_cube, scenario, modelname, quantile, start_year, final_year, 'historical',
                             reference_start_year, reference_final_year,
                             projection,
-                            diff_cube.var_name,vmin=-1,vmax=1)
+                            diff_cube.var_name,vmin=-100,vmax=100)
             plt.savefig(
                 filename + "_" + scenario + "_" + str(start_year) + "_" + str(final_year) + "_" + str(
                     diff_cube.var_name) + '_' + str(quantile) + '.png',
                 dpi=300, bbox_inches='tight')
             plt.close()
 
-def plot_start_end_maps(cubelist,varnames, filename, scenario, modelname, quantile):
+def plot_start_relative_maps(cubelist,varnames, filename, scenario, modelname, quantile,mask=None):
     for i_cube in cubelist:
         scenario_year_coord = i_cube.coord('scenario_year')
         if i_cube.var_name in varnames:
             first = last = next(scenario_year_coord.cells(), 2020)
-            for last in scenario_year_coord.cells():
-                pass
             first_timepoint = iris.Constraint(scenario_year=first)
-            last_timepoint = iris.Constraint (scenario_year=last)
-            final_cube = i_cube.extract(last_timepoint)
+            start_year = first[0].year
             start_cube = i_cube.extract(first_timepoint)
+            for last in scenario_year_coord.cells():
+                last_timepoint = iris.Constraint (scenario_year=last)
+                final_cube = i_cube.extract(last_timepoint)
+                final_year = last[0].year
+                diff_cube = (final_cube-start_cube)*100
+                diff_cube.var_name = i_cube.var_name + "_linear_trend_"+str(final_year)+"-"+str(start_year)
 
-            diff_cube = final_cube-start_cube
-            diff_cube.var_name = i_cube.var_name + "_end-start"
-
-            start_year = 2021
-            final_year = 2100
-            projection = cartopy.crs.AzimuthalEquidistant(central_latitude=90)
-
-            if "EES" in i_cube.var_name:
-                vmax = 0.25
-            else:
-                vmax = 1
-
-            plot_ratio_cube(diff_cube, scenario, modelname, quantile, start_year, final_year, 'historical',
-                            reference_start_year, reference_final_year,
-                            projection,
-                            diff_cube.var_name,vmin=-vmax,vmax=vmax)
-            plt.savefig(
-                filename + "_" + scenario + "_" + str(start_year) + "_" + str(final_year) + "_" + str(
-                    diff_cube.var_name) + '_' + str(quantile) + '.png',
-                dpi=300, bbox_inches='tight')
-            plt.close()
+                #mask with mask data
+                if mask is None:
+                    z=1+1
+                else:
+                    diff_cube = iris.util.mask_cube(diff_cube,mask)
 
 
+
+
+
+                if "EES" in i_cube.var_name:
+                    vmax = 25
+                else:
+                    vmax = 100
+
+                plot_ratio_cube(diff_cube, scenario, modelname, quantile, start_year, final_year, 'historical',
+                                reference_start_year, reference_final_year,
+                                projection,
+                                diff_cube.var_name,vmin=-vmax,vmax=vmax)
+                plt.savefig(
+                    filename + "_" + scenario + "_" + str(
+                        diff_cube.var_name) + '_' + str(quantile) + '.png',
+                    dpi=300, bbox_inches='tight')
+                plt.close()
+
+def plot_contour_start_relative_maps(cubelist,varnames, filename, scenario, modelname, quantile,mask=None):
+    for i_cube in cubelist:
+        scenario_year_coord = i_cube.coord('scenario_year')
+        if i_cube.var_name in varnames:
+            first = last = next(scenario_year_coord.cells(), 2020)
+            first_timepoint = iris.Constraint(scenario_year=first)
+            start_year = first[0].year
+            start_cube = i_cube.extract(first_timepoint)
+            for last in scenario_year_coord.cells():
+                last_timepoint = iris.Constraint (scenario_year=last)
+                final_cube = i_cube.extract(last_timepoint)
+                final_year = last[0].year
+                diff_cube = (final_cube-start_cube)*100
+                diff_cube.var_name = i_cube.var_name + "_linear_trend_"+str(final_year)+"-"+str(start_year)
+
+                #mask with mask data
+                if mask is None:
+                    z=1+1
+                else:
+                    diff_cube = iris.util.mask_cube(diff_cube,mask)
+
+
+
+
+
+                if "EES" in i_cube.var_name:
+                    vmax = 25
+                else:
+                    vmax = 100
+
+                plot_ratio_cube(diff_cube, scenario, modelname, quantile, start_year, final_year, 'historical',
+                                reference_start_year, reference_final_year,
+                                projection,
+                                diff_cube.var_name,vmin=-vmax,vmax=vmax,contour=True)
+                plt.savefig(
+                    filename + "_" + scenario + "_" + str(
+                        diff_cube.var_name) + '_' + str(quantile) + '.png',
+                    dpi=300, bbox_inches='tight')
+                plt.close()
 
 
 def plot_cubelist_diff_maps(cubelist, filename, scenario, modelname, quantile):
@@ -254,7 +309,7 @@ def plot_cubelist_diff_maps(cubelist, filename, scenario, modelname, quantile):
             start_year = year - 4
             final_year = year + 5
 
-            projection = cartopy.crs.AzimuthalEquidistant(central_latitude=90)
+
             diff_freq_key = 'diff_frequency'
             diff_es_key = 'diff_es'
             diff_rel_es_key = 'diff_es_baseline'
@@ -298,7 +353,7 @@ def plot_contribution_maps(cubelist, filename, scenario, modelname, quantile):
             start_year = year - 4
             final_year = year + 5
 
-            projection = cartopy.crs.AzimuthalEquidistant(central_latitude=90)
+
             vmax = 1
 
             vmin = 0
@@ -346,7 +401,7 @@ def plot_cubelist_average_single_scenario(ylims, cubelist, filename, var_names, 
             datapoint) + "K" + '\n' + scenario + " for " + areaname + ' ratios to baseline: ' + str(
             reference_start_year) + ' to ' + str(reference_final_year)
 
-    plt.title(title_str)
+    #plt.title(title_str)
 
     plt.savefig(filename + '_' + scenario + '_' + str(datapoint) + '.png', dpi=150, bbox_inches='tight')
     plt.close()
@@ -366,21 +421,25 @@ def generate_weights(cube, population=False):
 
 
 def plot_cubelist_average(cubelist, var_names, color,
-                          population=False, label="label", fmt="x"):
+                          population=False, label="label", fmt="x",mask=None):
     for i_cube in cubelist:
         if i_cube.var_name in var_names:
-            np.nan_to_num(i_cube.data, copy = False, nan = np.nan, posinf = np.nan,neginf = np.nan)
-            i_cube.data = np.ma.masked_invalid(i_cube.data)
             weights = generate_weights(i_cube, population=population)
+            if mask is None:
+                pi=3.14
+            else:
+                # set weights of masked areas to 0
+                weights = weights * np.invert(mask)
             average = i_cube.collapsed(('latitude', 'longitude'), iris.analysis.MEAN, weights=weights)
+
             # compute change of ratio compared to baseline ==1
             one_cube = average.copy(data=np.ones(average.data.shape))
-            change_value = average - one_cube
+            change_value = (average - one_cube)*100 #scale to percent
             if 'models' in label:
                 iplt.plot(change_value, fmt, lw='0.35', label=label, color=color, linestyle='solid')
             else:
                 iplt.plot(change_value, fmt, lw='0.35', label=label, color=color)
-            plt.ylabel("Change in " + i_cube.var_name + " (% baseline)")
+            plt.ylabel("Change in " + re.search('(\w+)(\d+_\d+)(.*)',i_cube.var_name).group(1) + " (% baseline)")
             plt.xlabel('Year')
 
 
@@ -418,29 +477,34 @@ def add_plot_summary_statistics(axes, ylims):
 
     plt.plot(x, median, color='navy', marker='o', linestyle='solid', lw=1, label="ensemble_median")
     plt.draw()
-    #axes.set_ylim(ylims)
-    y_tick_spacing = 0.05
-    ylim_min = np.min(lower_bound)
-    if np.min(lower_bound) > 0:
-        ylim_min = 0
-    ylim_max = ylim_min + 0.35
-    axes.set_ylim([ylim_min, ylim_max])
-    axes.yaxis.set_major_locator(mticker.MultipleLocator(y_tick_spacing))
+    # #axes.set_ylim(ylims)
+    #y_tick_spacing = 10
+    # ylim_min = np.min(lower_bound)
+    # if np.min(lower_bound) > 0:
+    #     ylim_min = 0
+    # ylim_max = ylim_min + 0.35
+    # axes.set_ylim([ylim_min, ylim_max])
+    #axes.yaxis.set_major_locator(mticker.MultipleLocator(y_tick_spacing))
 
     plt.axhline(y=0, ls='dotted', lw=0.25, c='k')
 
 
 def plot_variable_multiple_scenarios(ylims, cubelist_dict_by_scenario, var_name, scenarios, scenario_colors,
-                                     population=False):
+                                     population=False,elevation_mask_level=None):
     for i_scenario in scenarios:
         scenario_color = scenario_colors[i_scenario]
+        # generate mask of elevation of 1000
+        if (elevation_mask_level is None):
+            elevation_mask=None
+        else:
+            elevation_mask = generate_elevation_mask(elevation_cube, cubelist_dict_by_scenario[i_scenario][0], elevation_mask_level)
         plot_cubelist_average(cubelist_dict_by_scenario[i_scenario], var_name, scenario_color, population=population,
-                              label=i_scenario)
+                              label=i_scenario,mask=elevation_mask)
 
 
 def plot_multiple_variables_multiple_scenario(ylims, cubelist_dict_by_scenario, filename, variablenames, modelname,
                                               areaname, scenarios, scenario_colors, datapoint,
-                                              population=False, temperature=False):
+                                              population=False, temperature=False,elevation_mask_level=None):
     number_of_variables = len(variablenames)
     number_of_rows = 1
     number_of_columns = int(number_of_variables / number_of_rows)
@@ -451,7 +515,7 @@ def plot_multiple_variables_multiple_scenario(ylims, cubelist_dict_by_scenario, 
     ax.append(fig.add_subplot(number_of_rows, number_of_columns, 1))
     print(variablenames[0])
     plot_variable_multiple_scenarios(ylims, cubelist_dict_by_scenario, variablenames[0], scenarios, scenario_colors,
-                                     population=population)
+                                     population=population,elevation_mask_level=elevation_mask_level)
     add_plot_summary_statistics(plt.gca(), ylims)
 
     position = range(1, number_of_variables + 1)
@@ -460,7 +524,7 @@ def plot_multiple_variables_multiple_scenario(ylims, cubelist_dict_by_scenario, 
         ax.append(fig.add_subplot(number_of_rows, number_of_columns, position[k], sharex=ax[k - 1]))
         print(variablenames[k])
         plot_variable_multiple_scenarios(ylims, cubelist_dict_by_scenario, variablenames[k], scenarios, scenario_colors,
-                                         population=population)
+                                         population=population,elevation_mask_level=elevation_mask_level)
         add_plot_summary_statistics(plt.gca(), ylims)
 
     title_str = (modelname + " percentile: " + str(
@@ -471,7 +535,8 @@ def plot_multiple_variables_multiple_scenario(ylims, cubelist_dict_by_scenario, 
             reference_start_year) + ' to ' + str(reference_final_year)
 
     axs = fig.axes
-    plt.suptitle(title_str, y=1.05)
+    #plt.suptitle(title_str, y=1.05)
+    # add lowercase letters to figure for labelling
     for n, ax in enumerate(axs):
         ax.text(-0.1, 1.02, string.ascii_lowercase[n], transform=ax.transAxes,
                 size=11, weight='bold')
@@ -481,7 +546,7 @@ def plot_multiple_variables_multiple_scenario(ylims, cubelist_dict_by_scenario, 
     # fig.legend(by_label.values(), by_label.keys())
     years = mdates.YearLocator(10, 2, 1)
     # ax.xaxis.set_major_locator(years)
-
+    ax.margins(0)
     plt.tight_layout()
 
     plt.savefig(modelname+ '_' + filename + '_' + "multi_scenario" + '_' + str(datapoint) + '.png', dpi=300, bbox_inches='tight')
@@ -509,6 +574,8 @@ def plot_development_multiple_scenarios(ylims, modelname, filelist_dict, arealis
         scenario_cubelists = {}
         cubelists = {}
         scenario_data = {}
+        scenario_cubelists_elevation_masked = {}
+        print(filelist_dict)
         for i_scenario in scenarios:
             data_to_plot = {}
             for i_file in filelist_dict[i_scenario]:
@@ -524,17 +591,27 @@ def plot_development_multiple_scenarios(ylims, modelname, filelist_dict, arealis
             for i_extended_list in results_cache:
                 for i_cube in i_extended_list:
                     all_files.append(i_cube)
-
             all_files_concatenated = all_files.concatenate()
             print(all_files_concatenated)
             scenario_cubelists[i_scenario] = all_files_concatenated
+            # elevation_masked_cubelist = iris.cube.CubeList()
+            # # generate elvation mask
+            # elevation_mask = generate_elevation_mask(elevation_cube, all_files_concatenated[0], 1000)
+            # number_of_timesteps = i_cube.shape[0]
+            # time_scaled_mask = np.tile(elevation_mask, (number_of_timesteps, 1, 1))
+            # # apply mask to all cubes from this scenario
+            # for i_cube in all_files_concatenated:
+            #     elevation_masked_cubelist.append(iris.util.mask_cube(i_cube,time_scaled_mask))
+            # scenario_cubelists_elevation_masked[i_scenario] = elevation_masked_cubelist
 
         population_cubes = {}
 
         area_cubes = {}
+        area_cubes_elevation_masked = {}
         i = 0
         for i_area in arealist:
             scenario_area_data = {}
+            scenario_area_data_elevation_masked = {}
             for i_scenario in scenarios:
                 scenario_area_data[i_scenario] = iris.cube.CubeList()
                 for i_cube in scenario_cubelists[i_scenario]:
@@ -542,7 +619,12 @@ def plot_development_multiple_scenarios(ylims, modelname, filelist_dict, arealis
                     population_cube = cube_from_bounding_box(current_population, i_area)
                     scenario_area_data[i_scenario].append(area_cube)
                     population_cubes[areanames[i]] = (population_cube)
-            area_cubes[areanames[i]] = scenario_area_data
+                area_cubes[areanames[i]] = scenario_area_data
+                # scenario_area_data_elevation_masked[i_scenario]= iris.cube.CubeList()
+                # for i_cube in scenario_cubelists_elevation_masked[i_scenario]:
+                #     area_cube = cube_from_bounding_box(i_cube, i_area)
+                #     scenario_area_data_elevation_masked[i_scenario].append(area_cube)
+                # area_cubes_elevation_masked[areanames[i]] = scenario_area_data_elevation_masked
             i = i + 1
 
         for i_datapoint in datapoints:
@@ -564,23 +646,23 @@ def plot_development_multiple_scenarios(ylims, modelname, filelist_dict, arealis
                           percentile_pr_ratio_key, snow_between_percentile_key]
             else:
 
-                variable_keys = [mean_ratio_key, es_ratio_key, quantile_ratio_key]
+                variable_keys = [frequency_ratio_key,mean_ratio_key, es_ratio_key, quantile_ratio_key]
 
-                percentile_bins = [(25,100)]
+                percentile_bins = [(0,100)]
 
-            level_bins = [(25,100)]
-            # plot summary map for levels of bins:
-            level_sample_key = 'mean'
-            levelnames = []
-            for i_bin in level_bins:
-                levelnames.append(level_sample_key + "_" + str(i_bin[0]) + "_" + str(i_bin[1]))
-            for i_scenario in scenarios:
-                levelcubes = {}
-                for i_cube in scenario_cubelists[i_scenario]:
-                    if (i_cube.var_name in levelnames):
-                        levelcubes[i_cube.var_name] = i_cube
-                print(levelcubes)
-                plot_levels('mean_decentiles', levelcubes, i_scenario)
+            # level_bins = [(0,100)]
+            # # plot summary map for levels of bins:
+            # level_sample_key = 'mean'
+            # levelnames = []
+            # for i_bin in level_bins:
+            #     levelnames.append(level_sample_key + "_" + str(i_bin[0]) + "_" + str(i_bin[1]))
+            # for i_scenario in scenarios:
+            #     levelcubes = {}
+            #     for i_cube in scenario_cubelists[i_scenario]:
+            #         if (i_cube.var_name in levelnames):
+            #             levelcubes[i_cube.var_name] = i_cube
+            #     print(levelcubes)
+            #     plot_levels('mean_decentiles', levelcubes, i_scenario)
 
 
             for i_bin in percentile_bins:
@@ -589,6 +671,7 @@ def plot_development_multiple_scenarios(ylims, modelname, filelist_dict, arealis
                         ratios.append(i_variable + "_" + str(i_bin[0]) + "_" + str(i_bin[1]))
 
                 for i_area in areanames:
+
                     # test population weighting
                     print(i_area)
                     if populationweighting:
@@ -599,18 +682,35 @@ def plot_development_multiple_scenarios(ylims, modelname, filelist_dict, arealis
                                                                   population=population_cubes[i_area],
                                                                   temperature=temperature)
                         print(i_area + "population finished")
-                    plot_multiple_variables_multiple_scenario(ylims, area_cubes[i_area], str(i_area + '_ratios_'+ str(i_bin[0]) + "_" + str(i_bin[1])), ratios, modelname,
+                    plot_multiple_variables_multiple_scenario(ylims, area_cubes[i_area], str(i_area + '_ratios_<1000m_'+ str(i_bin[0]) + "_" + str(i_bin[1])), ratios, modelname,
+                                                              i_area, scenarios, scenario_colors, i_datapoint,
+                                                              temperature=temperature,elevation_mask_level=1000)
+                    plot_multiple_variables_multiple_scenario(ylims, area_cubes[i_area], str(
+                        i_area + '_ratios_' + str(i_bin[0]) + "_" + str(i_bin[1])), ratios, modelname,
                                                               i_area, scenarios, scenario_colors, i_datapoint,
                                                               temperature=temperature)
                 if maps:
 
                     for i_scenario in scenarios:
-                        plot_min_max_maps(scenario_cubelists[i_scenario],ratios, 'NORTHERN_HEMISPHERE', i_scenario, modelname,
-                                                 i_datapoint)
-                        plot_start_end_maps(scenario_cubelists[i_scenario], ratios, 'NORTHERN_HEMISPHERE', i_scenario, modelname,
-                                          i_datapoint)
+                        elevation_mask = generate_elevation_mask(elevation_cube,scenario_cubelists[i_scenario][0], 1000)
+                        plot_min_max_maps(scenario_cubelists[i_scenario],ratios, 'NORTHERN_HEMISPHERE_elevation<1000m', i_scenario, modelname,
+                                                 i_datapoint,mask=elevation_mask)
+                        plot_start_relative_maps(scenario_cubelists[i_scenario], ratios, 'NORTHERN_HEMISPHERE_elevation<1000m', i_scenario, modelname,
+                                          i_datapoint,mask=elevation_mask)
+
+                        plot_min_max_maps(scenario_cubelists[i_scenario], ratios, 'NORTHERN_HEMISPHERE_elevation>=1000m',
+                                          i_scenario, modelname,
+                                          i_datapoint, mask=np.invert(elevation_mask))
+                        plot_start_relative_maps(scenario_cubelists[i_scenario], ratios,
+                                                 'NORTHERN_HEMISPHERE_elevation>=1000m', i_scenario, modelname,
+                                                 i_datapoint, mask=np.invert(elevation_mask))
+                    elevation_mask = generate_elevation_mask(elevation_cube, scenario_cubelists['isimip_ensemble_all_models'][0],
+                                                                 1000)
+                    plot_contour_start_relative_maps(scenario_cubelists['isimip_ensemble_all_models'], ratios,'NORTHERN_HEMISPHERE_elevation<1000m', i_scenario, modelname,
+                                      i_datapoint,mask=elevation_mask)
+
         # optional analysis of development of different levels of ees in parallel to identify switch of sign of EES trend
-        EES_level_curves = True
+        EES_level_curves = False
         if EES_level_curves:
             levels = datapoints # possible to extend by excluding specific levels
             keys = []
@@ -673,7 +773,7 @@ def population_weighting(cubelist, population_data):
 def plot_levels(name, level_cubes, scenario):
 
     coordinate_projection = cartopy.crs.PlateCarree()
-    projection = cartopy.crs.AzimuthalEquidistant(central_latitude=90)
+
     ax = plt.axes(projection=projection)
 
     num_colors = len(level_cubes)
@@ -699,20 +799,50 @@ def plot_levels(name, level_cubes, scenario):
 
         i= i+1
     ax.gridlines()
-    theta = np.linspace(0, 2 * np.pi, 100)
-    center, radius = [0.5, 0.5], 0.5
-    verts = np.vstack([np.sin(theta), np.cos(theta)]).T
-    circle = mpath.Path(verts * radius + center)
-    ax.set_boundary(circle, transform=plt.gca().transAxes)
+    # theta = np.linspace(0, 2 * np.pi, 100)
+    # center, radius = [0.5, 0.5], 0.5
+    # verts = np.vstack([np.sin(theta), np.cos(theta)]).T
+    # circle = mpath.Path(verts * radius + center)
+    # ax.set_boundary(circle, transform=plt.gca().transAxes)
     ax.coastlines()
 
     plt.savefig(scenario+"_"+name+'_level_map.png', dpi=150, bbox_inches='tight')
     plt.close()
 
+def guess_non_existing_bounds(cube):
+    if (cube.coord('latitude').has_bounds() != True):
+        cube.coord('latitude').guess_bounds()
+        cube.coord('longitude').guess_bounds()
+
+def generate_elevation_mask (elevation_cube,grid_cube,height):
+    guess_non_existing_bounds(grid_cube)
+    elevation_cube = cube_from_bounding_box(elevation_cube, [30, -180, 90, 180])
+    elevation_cube = elevation_cube.regrid(grid_cube,iris.analysis.AreaWeighted())
+    return elevation_cube.data[0,:,:] > height
+
+def filter_for_country (iso_country_cube,iso_code_index,data_cube):
+    print(iso_country_cube)
+
+    iso_code_array = iso_country_cube.data
+
+    iso_country_cube.data = iso_code_array*(iso_code_array==iso_code_index)
+    # regrid to data cube grid
+    guess_non_existing_bounds(data_cube)
+    iso_country_cube= iso_country_cube.regrid(data_cube,iris.analysis.Nearest(extrapolation_mode='mask'))
+    iso_new_grid_data = iso_country_cube.data
+    print(data_cube.data.shape)
+    print(iso_new_grid_data.shape)
+    iris.quickplot.contourf(iso_country_cube,levels=[0,iso_code_index-1,iso_code_index+1])
+    plt.savefig(str(iso_code_index)+".png")
+    plt.close()
+
+    return iris.util.mask_cube(data_cube,(iso_new_grid_data!=iso_code_index))
+
+
 def plot_areaboxes(arealist, testcube):
     # TODO: figure out a way to transform to a
     coordinate_projection = cartopy.crs.PlateCarree()
-    projection = cartopy.crs.AzimuthalEquidistant(central_latitude=90)
+
     ax = plt.axes(projection=projection)
 
     uniform_grey_start = plt.cm.gray(np.linspace(0, 0.5, 1))
@@ -756,11 +886,11 @@ def plot_areaboxes(arealist, testcube):
                 verticalalignment='top', color='red', transform=coordinate_projection)
         i = i + 1
     ax.gridlines()
-    theta = np.linspace(0, 2 * np.pi, 100)
-    center, radius = [0.5, 0.5], 0.5
-    verts = np.vstack([np.sin(theta), np.cos(theta)]).T
-    circle = mpath.Path(verts * radius + center)
-    ax.set_boundary(circle, transform=plt.gca().transAxes)
+    # theta = np.linspace(0, 2 * np.pi, 100)
+    # center, radius = [0.5, 0.5], 0.5
+    # verts = np.vstack([np.sin(theta), np.cos(theta)]).T
+    # circle = mpath.Path(verts * radius + center)
+    # ax.set_boundary(circle, transform=plt.gca().transAxes)
     ax.coastlines()
 
     plt.savefig('region_map.png', dpi=150, bbox_inches='tight')
@@ -804,6 +934,16 @@ with open(settings['areas'], 'r') as stream:
 arealist = areas['arealist']
 areanames = areas['areanames']
 
+elevation_file = settings['elevation']
+
+elevation_cube = iris.load_cube(elevation_file)
+elevation_cube.remove_coord('time')
+guess_non_existing_bounds(elevation_cube)
+
+iso_country_file = settings['iso_country']
+iso_country_cube = iris.load_cube(iso_country_file)
+guess_non_existing_bounds(iso_country_cube)
+
 datapoints = settings['datapoints']
 modelname = settings['modelname']
 ylims = settings['ylims']
@@ -817,7 +957,8 @@ universal_mask = bool(settings['universal_mask'])
 maskfiles = {}
 populationweighting = bool(settings['population_weighting'])
 single_model_display = bool(settings['single_model_display'])
-
+#TODO: set projection to be used globally
+projection = cartopy.crs.PlateCarree()
 
 with open(settings['scenario_colors'], 'r') as stream:
     try:
@@ -834,6 +975,8 @@ scaling_factor = 100000
 current_population.units = scaling_factor
 current_population = current_population / scaling_factor
 plot_areaboxes(arealist, cube_from_bounding_box(current_population, [30, -180, 90, 180]))
+
+
 
 
 if multi_model:
@@ -853,9 +996,10 @@ if multi_model:
         timeperiod_length = 10
         reference_start_year = 1851
         reference_final_year = 1920
-        plot_development_multiple_scenarios(ylims, modelname, filelists, arealist, areanames, modellist, datapoints,
-                                            temperature=temperature, maps=True)
-        os.chdir("..")
+    filter_for_country(iso_country_cube,66,current_population)
+    # plot_development_multiple_scenarios(ylims, modelname, filelists, arealist, areanames, modellist, datapoints,
+          #                              temperature=temperature, maps=True)
+    os.chdir("..")
 else:
     for i_data in datapoints:
         date = datetime.now()
