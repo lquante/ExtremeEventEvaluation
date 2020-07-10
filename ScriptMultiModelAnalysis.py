@@ -156,7 +156,7 @@ def calculate_quantile_exceedance_measure(historical_cubelist, ssp_cubelist, ssp
 
     num_cores = int(multiprocessing.cpu_count()/6)
     if (ensemble_boolean):
-        num_cores = int(num_cores / 12)
+        num_cores = int(multiprocessing.cpu_count() / 12)
     historical_starts = tqdm(historical_start_list)
     data = {}
 
@@ -699,8 +699,8 @@ else:
         for i_model in models:
             prsn_cubes[i_model, i_scenario] = load_from_nc(filelist_prsn[i_scenario][i_model], variable_key, 0)
     # TODO: flexible extension of historical data with respective ssp, but should not make a big difference
-    # for i_model in models:
-    #     unify_current_decade(prsn_cubes, i_model, 'ssp585')
+    for i_model in models:
+        unify_current_decade(prsn_cubes, i_model, 'ssp585')
 
 # ignore warnings
 warnings.simplefilter("ignore")
