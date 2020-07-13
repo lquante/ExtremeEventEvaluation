@@ -40,6 +40,7 @@ def latitude_constraint(latitude, cube):
 def unify_concatenate(cubelist):
     unify_time_units(cubelist)
     equalise_attributes(cubelist)
+    print(cubelist)
     return cubelist.concatenate_cube()
 
 
@@ -52,11 +53,17 @@ def add_lon_lat_bounds(cube):
 # generate extra cube of decade 2011 to 2020 (with scenario data)
 def unify_current_decade(cubelist, model, scenario):
     cubes_to_concatenate = iris.cube.CubeList()
-    cubes_to_concatenate.append(cubelist[model, 'historical'][17])
-    cubes_to_concatenate.append(cubelist[model, scenario][0])
-
+    i=0
+    for i_historical_cube in cubelist[model, 'historical']:
+        if i_historical_cube.shape[0]>1000 and i_historical_cube.shape[0]<2000: # identify "half decade" to merge with half decade from scenario
+            cubes_to_concatenate.append(i_historical_cube)
+            half_decade_index = i
+        i=i+1
+    for i_scenario_cube in cubelist[model, scenario]:
+        if i_scenario_cube.shape[0]>1000 and i_scenario_cube.shape[0]<2000: # identify "half decade" to merge with half decade from scenario
+            cubes_to_concatenate.append(i_scenario_cube)
     cube_2011_2020 = unify_concatenate(cubes_to_concatenate)
-    cubelist[model, 'historical'][17] = cube_2011_2020
+    cubelist[model, 'historical'][half_decade_index] = cube_2011_2020 # replace half decade historical cube by combined cube
 
 
 # main method to calculate statistics of percentile exceedances from a list of cubes representing a model ensemble
@@ -154,9 +161,9 @@ def calculate_quantile_exceedance_measure(historical_cubelist, ssp_cubelist, ssp
 
             ssp_start_list.append(ssp_start_list[index - 1] + number_of_years_to_compare)
 
-    num_cores = int(multiprocessing.cpu_count()/6)
+    num_cores = int(multiprocessing.cpu_count()/16)
     if (ensemble_boolean):
-        num_cores = int(multiprocessing.cpu_count() / 12)
+        num_cores = int(multiprocessing.cpu_count() / 16)
     historical_starts = tqdm(historical_start_list)
     data = {}
 
@@ -658,7 +665,7 @@ baseline_periods = settings ['baseline_periods']
 baseline_end = baseline_start + baseline_periods * timeperiod_length - 1
 baseline_decades = int((baseline_end - baseline_start + 1) / 10)
 
-number_of_historical_periods = int((2010-baseline_end)/timeperiod_length)
+number_of_historical_periods = int((2020-baseline_end)/timeperiod_length)
 
 full_historical = int(settings['full_historical'])
 scenario_analysis = int(settings['scenario_analysis'])
