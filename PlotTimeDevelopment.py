@@ -167,7 +167,7 @@ def plot_ratio_cube(cube, scenario_data, modelname, quantile, startyear_data, fi
     #           scenario_comparison + ": " + str(startyear_comparison) + " to " + str(finalyear_comparison), fontsize=10)
 
 
-def plot_cubelist_ratio_maps(cubelist,varnames, filename, scenario, modelname, quantile):
+def plot_cubelist_ratio_maps(cubelist,varnames, filename, scenario, modelname, quantile,mask=None):
     for i_cube in cubelist:
         scenario_year_coord = i_cube.coord('scenario_year')
         if i_cube.var_name in varnames:
@@ -179,11 +179,15 @@ def plot_cubelist_ratio_maps(cubelist,varnames, filename, scenario, modelname, q
                 start_year = year - 4
                 final_year = year + 5
 
+                if mask is None:
+                    z = 1 + 1
+                else:
+                    time_cube = iris.util.mask_cube(time_cube, mask)
 
                 plot_ratio_cube(time_cube, scenario, modelname, quantile, start_year, final_year, 'historical',
                                 reference_start_year, reference_final_year,
                                 projection,
-                                time_cube.var_name)
+                                time_cube.var_name,vmin=-100,vmax=100)
                 plt.savefig(
                     filename + "_" + scenario + "_" + str(start_year) + "_" + str(final_year) + "_" + str(
                         time_cube.var_name) + '_' + str(quantile) + '.png',
@@ -568,7 +572,7 @@ def import_unify(file, cubelists, data_to_plot, maskpath):
 
 
 def plot_development_multiple_scenarios(ylims, modelname, filelist_dict, arealist, areanames, scenarios, datapoints
-                                        ,temperature=False, maps=False,EES_level_curves=False):
+                                        ,temperature=False, maps=False,EES_level_curves=False,country_codes=None):
 
         # prepare time series of interesting phenomenoms by concatening all cubes:
         scenario_cubelists = {}
@@ -604,8 +608,31 @@ def plot_development_multiple_scenarios(ylims, modelname, filelist_dict, arealis
             #     elevation_masked_cubelist.append(iris.util.mask_cube(i_cube,time_scaled_mask))
             # scenario_cubelists_elevation_masked[i_scenario] = elevation_masked_cubelist
 
-        population_cubes = {}
+        #get data for submitted country codes like extracting for areas
+        country_population_cubes = {}
+        country_cubes = {}
+        country_cubes_elevation_masked = {}
+        i = 0
+        for i_country in country_codes:
+            scenario_country_data = {}
+            scenario_country_data_elevation_masked = {}
+            for i_scenario in scenarios:
+                scenario_country_data[i_scenario] = iris.cube.CubeList()
+                for i_cube in scenario_cubelists[i_scenario]:
+                    country_cube = filter_for_country(iso_country_cube, i_country,i_cube)
+                    population_cube = filter_for_country(iso_country_cube, i_country,current_population)
+                    scenario_country_data[i_scenario].append(country_cube)
+                    country_population_cubes[i_country] = (population_cube)
+                country_cubes[i_country] = scenario_country_data
+                # scenario_area_data_elevation_masked[i_scenario]= iris.cube.CubeList()
+                # for i_cube in scenario_cubelists_elevation_masked[i_scenario]:
+                #     area_cube = cube_from_bounding_box(i_cube, i_area)
+                #     scenario_area_data_elevation_masked[i_scenario].append(area_cube)
+                # area_cubes_elevation_masked[areanames[i]] = scenario_area_data_elevation_masked
+            i = i + 1
 
+
+        population_cubes = {}
         area_cubes = {}
         area_cubes_elevation_masked = {}
         i = 0
@@ -689,25 +716,60 @@ def plot_development_multiple_scenarios(ylims, modelname, filelist_dict, arealis
                         i_area + '_ratios_' + str(i_bin[0]) + "_" + str(i_bin[1])), ratios, modelname,
                                                               i_area, scenarios, scenario_colors, i_datapoint,
                                                               temperature=temperature)
+
+                    for i_country in country_codes:
+
+                        # test population weighting
+                        print(i_country)
+                        if populationweighting:
+                            plot_multiple_variables_multiple_scenario(ylims, country_cubes[i_country],
+                                                                      str(i_country + '_population_weighted'),
+                                                                      ratios,
+                                                                      modelname + "_population_weighted",
+                                                                      i_country, scenarios, scenario_colors, i_datapoint,
+                                                                      population=country_population_cubes[i_country],
+                                                                      temperature=temperature)
+                            print(i_country + "population finished")
+                        plot_multiple_variables_multiple_scenario(ylims, country_cubes[i_country], str(
+                            i_country + '_ratios_<1000m_' + str(i_bin[0]) + "_" + str(i_bin[1])), ratios, modelname,
+                                                                  i_country, scenarios, scenario_colors, i_datapoint,
+                                                                  temperature=temperature, elevation_mask_level=1000)
+                        plot_multiple_variables_multiple_scenario(ylims, country_cubes[i_country], str(
+                            i_country + '_ratios_' + str(i_bin[0]) + "_" + str(i_bin[1])), ratios, modelname,
+                                                                  i_country, scenarios, scenario_colors, i_datapoint,
+                                                                  temperature=temperature)
+
                 if maps:
 
                     for i_scenario in scenarios:
                         elevation_mask = generate_elevation_mask(elevation_cube,scenario_cubelists[i_scenario][0], 1000)
+                        # min-max maps for ssp scenario
                         plot_min_max_maps(scenario_cubelists[i_scenario],ratios, 'NORTHERN_HEMISPHERE_elevation<1000m', i_scenario, modelname,
                                                  i_datapoint,mask=elevation_mask)
-                        plot_start_relative_maps(scenario_cubelists[i_scenario], ratios, 'NORTHERN_HEMISPHERE_elevation<1000m', i_scenario, modelname,
-                                          i_datapoint,mask=elevation_mask)
-
                         plot_min_max_maps(scenario_cubelists[i_scenario], ratios, 'NORTHERN_HEMISPHERE_elevation>=1000m',
                                           i_scenario, modelname,
                                           i_datapoint, mask=np.invert(elevation_mask))
+                        # intra-scenario trend maps
+                        plot_start_relative_maps(scenario_cubelists[i_scenario], ratios,
+                                                 'NORTHERN_HEMISPHERE_elevation<1000m', i_scenario, modelname,
+                                                 i_datapoint, mask=elevation_mask)
+
                         plot_start_relative_maps(scenario_cubelists[i_scenario], ratios,
                                                  'NORTHERN_HEMISPHERE_elevation>=1000m', i_scenario, modelname,
                                                  i_datapoint, mask=np.invert(elevation_mask))
+                        # just baseline relative maps
+                        plot_cubelist_ratio_maps(scenario_cubelists[i_scenario],ratios, 'NORTHERN_HEMISPHERE', i_scenario,
+                                                 modelname,i_datapoint)
+                        plot_cubelist_ratio_maps(scenario_cubelists[i_scenario], ratios, 'NORTHERN_HEMISPHERE',
+                                                 i_scenario,
+                                                 modelname, i_datapoint,mask=elevation_mask)
+
                     elevation_mask = generate_elevation_mask(elevation_cube, scenario_cubelists['isimip_ensemble_all_models'][0],
                                                                  1000)
                     plot_contour_start_relative_maps(scenario_cubelists['isimip_ensemble_all_models'], ratios,'NORTHERN_HEMISPHERE_elevation<1000m', i_scenario, modelname,
                                       i_datapoint,mask=elevation_mask)
+
+
 
         # optional analysis of development of different levels of ees in parallel to identify switch of sign of EES trend
         EES_level_curves = False
@@ -976,7 +1038,9 @@ current_population.units = scaling_factor
 current_population = current_population / scaling_factor
 plot_areaboxes(arealist, cube_from_bounding_box(current_population, [30, -180, 90, 180]))
 
+# TODO: transfer to settingsfile after test
 
+country_iso_codes = [66,61,157] #66 GER, 61 FRA, 157 ESP
 
 
 if multi_model:
@@ -996,9 +1060,9 @@ if multi_model:
         timeperiod_length = 10
         reference_start_year = 1851
         reference_final_year = 1920
-    filter_for_country(iso_country_cube,66,current_population)
-    # plot_development_multiple_scenarios(ylims, modelname, filelists, arealist, areanames, modellist, datapoints,
-          #                              temperature=temperature, maps=True)
+
+    plot_development_multiple_scenarios(ylims, modelname, filelists, arealist, areanames, modellist, datapoints,
+                                 temperature=temperature, maps=True,countrycodes=country_iso_codes)
     os.chdir("..")
 else:
     for i_data in datapoints:
