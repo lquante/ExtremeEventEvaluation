@@ -414,19 +414,21 @@ def ensemble_average_temperature(temperatures, models, ensemblename, results, re
                 str(temperature), i_start_year, 'pr_percentile_' + str(
                     percentile_to_calculate) + ''] = pr_percentile_ratio[i_start_year]
 
+            lower_bound_temperature = np.min(temperature)
+            upper_bound_temperature= np.max(temperature)
 
             dict_to_plot[
                 str(
-                    temperature), i_start_year, 'days_between_temperature'].var_name = 'days_between_temperature'
+                    temperature), i_start_year, 'days_between_temperature'].var_name = 'days_between_temperature'+'_'+str(lower_bound_temperature)+'_'+str(upper_bound_temperature)
             dict_to_plot[
                 str(
-                    temperature), i_start_year, 'mean_snow_between_temperature'].var_name = 'mean_snow_between_temperature'
+                    temperature), i_start_year, 'mean_snow_between_temperature'].var_name = 'mean_snow_between_temperature'+'_'+str(lower_bound_temperature)+'_'+str(upper_bound_temperature)
             dict_to_plot[
-                str(temperature), i_start_year, 'mean_precipitation'].var_name = 'mean_precipitation'
+                str(temperature), i_start_year, 'mean_precipitation'].var_name = 'mean_precipitation'+'_'+str(lower_bound_temperature)+'_'+str(upper_bound_temperature)
             dict_to_plot[
                 str(temperature), i_start_year, 'pr_percentile_' + str(
                     percentile_to_calculate) + ''].var_name = 'pr_percentile_' + str(
-                percentile_to_calculate) + ''
+                percentile_to_calculate)+'_'+str(lower_bound_temperature)+'_'+str(upper_bound_temperature)
 
             print(dict_to_plot.keys())
     return dict_to_plot
