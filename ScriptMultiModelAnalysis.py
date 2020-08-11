@@ -53,18 +53,23 @@ def add_lon_lat_bounds(cube):
 # generate extra cube of decade 2011 to 2020 (with scenario data)
 def unify_current_decade(cubelist, model, scenario):
     cubes_to_concatenate = iris.cube.CubeList()
-    i=0
+    i = 0
+    half_decade_index = 0
     for i_historical_cube in cubelist[model, 'historical']:
-        if i_historical_cube.shape[0]>1000 and i_historical_cube.shape[0]<2000: # identify "half decade" to merge with half decade from scenario
+        if i_historical_cube.shape[0] > 1000 and i_historical_cube.shape[
+            0] < 2000:  # identify "half decade" to merge with half decade from scenario
             cubes_to_concatenate.append(i_historical_cube)
             half_decade_index = i
-        i=i+1
+        i = i + 1
     for i_scenario_cube in cubelist[model, scenario]:
-        if i_scenario_cube.shape[0]>1000 and i_scenario_cube.shape[0]<2000: # identify "half decade" to merge with half decade from scenario
+        if i_scenario_cube.shape[0] > 1000 and i_scenario_cube.shape[
+            0] < 2000:  # identify "half decade" to merge with half decade from scenario
             cubes_to_concatenate.append(i_scenario_cube)
     cube_2011_2020 = unify_concatenate(cubes_to_concatenate)
-    cubelist[model, 'historical'][half_decade_index] = cube_2011_2020 # replace half decade historical cube by combined cube
+    cubelist[model, 'historical'][
+        half_decade_index] = cube_2011_2020  # replace half decade historical cube by combined cube
     return cubelist
+
 
 # main method to calculate statistics of percentile exceedances from a list of cubes representing a model ensemble
 def generate_quantile_exceedance_development(cubelist, baselinequantiles, quantiles, startyear, finalyear):
@@ -79,7 +84,7 @@ def generate_quantile_exceedance_development(cubelist, baselinequantiles, quanti
         data_timeperiod = extract_dates(cube, startyear, finalyear)
         print("between" + str(startyear) + "and" + str(finalyear))
         number_of_timepoints = data_timeperiod.data.shape[0]
-        print("timepoint"+ str(number_of_timepoints))
+        print("timepoint" + str(number_of_timepoints))
         mean_data = data_timeperiod.collapsed('time', iris.analysis.MEAN)
         mean_data.var_name = 'mean_daily_snowfall'
         for i_quantile in quantiles:
@@ -128,14 +133,18 @@ def generate_quantile_exceedance_development(cubelist, baselinequantiles, quanti
         # calculate relative contribuition of each model to exceedance count:
         for iterator_model in cubelist.keys():
             results['exceedance_number_contribuition', i_quantile, iterator_model] = cuberesults[iterator_model][
-                                                                                         'number_exceedances', i_quantile]
+                'number_exceedances', i_quantile]
             results['exceedance_number_contribuition', i_quantile, iterator_model].data = cuberesults[iterator_model][
-                'number_exceedances', i_quantile].data / results['number_exceedances', i_quantile].data
+                                                                                              'number_exceedances', i_quantile].data / \
+                                                                                          results[
+                                                                                              'number_exceedances', i_quantile].data
 
             results['exceedance_mean_contribuition', i_quantile, iterator_model] = cuberesults[iterator_model][
                 'sum_exceedance', i_quantile]
             results['exceedance_number_contribuition', i_quantile, iterator_model].data = cuberesults[iterator_model][
-                                            'sum_exceedance', i_quantile].data / results['sum_exceedance', i_quantile].data
+                                                                                              'sum_exceedance', i_quantile].data / \
+                                                                                          results[
+                                                                                              'sum_exceedance', i_quantile].data
     return results
 
 
@@ -163,7 +172,7 @@ def calculate_quantile_exceedance_measure(historical_cubelist, ssp_cubelist, ssp
 
             ssp_start_list.append(ssp_start_list[index - 1] + number_of_years_to_compare)
 
-    num_cores = int(multiprocessing.cpu_count()/4)
+    num_cores = int(multiprocessing.cpu_count() / 4)
     if (ensemble_boolean):
         num_cores = int(multiprocessing.cpu_count() / 8)
     historical_starts = tqdm(historical_start_list)
@@ -187,7 +196,6 @@ def calculate_quantile_exceedance_measure(historical_cubelist, ssp_cubelist, ssp
     # for i_start in ssp_start_list:
     #     results_cache.append(percentile_dict_entry(i_start, ssp_scenario, ssp_cubelist, baseline_quantiles, quantiles,
     #                                     number_of_years_to_compare))
-
 
     for i_result in results_cache:
         data[i_result[0]] = i_result[1]
@@ -263,7 +271,8 @@ def percentile_from_cubedict(cubedict, percentile, startyear, finalyear, year=Fa
     return percentile_cube
 
 
-def comparison_threshold(modellist, basic_cubelist, ssp_scenario, timeperiod_length, number_of_timeperiods, area_box, start_historical,
+def comparison_threshold(modellist, basic_cubelist, ssp_scenario, timeperiod_length, number_of_timeperiods, area_box,
+                         start_historical,
                          start_ssp, percentiles_to_calculate,
                          historical=True, rolling_window=True):
     # filter data for country box:
@@ -300,7 +309,8 @@ def multi_region_threshold_analysis_preindustrial(cubelist, modellist, areas_to_
         identifier = ensemblename
 
     for i_area in tqdm(areas_to_analyse.keys()):
-        results = {(identifier, 'preindustrial', i_area): comparison_threshold(modellist, cubelist, ssp_scenario,length_timeperiod,
+        results = {(identifier, 'preindustrial', i_area): comparison_threshold(modellist, cubelist, ssp_scenario,
+                                                                               length_timeperiod,
                                                                                number_of_timeperiods,
                                                                                areas_to_analyse[i_area],
                                                                                start_historical,
@@ -421,11 +431,6 @@ def generate_temperature_snow_development(cubelist_temperature, cubelist_snow, c
         results[data_key] = cuberesults[model_keys[0]][data_key].copy(data=results_data)
     # transform snow_between temp dict to temperature bin wise results:
 
-    # NB: just using percentiles in a crude way directly from settingsfile, to get the same as used for EEI of snow etc.
-    for i_percentile in percentiles:
-        results['precipitation_percentile', i_percentile] = percentile_from_cubedict(cubelist_precipitation,
-                                                                                     i_percentile, startyear,
-                                                                                     finalyear)
     return results
 
 
@@ -509,7 +514,8 @@ def temperature_dict_entry(start, key, cubelist_temperature, cubelist_snow, cube
     return (key, start, end), result
 
 
-def analyse_temperature_snow(modellist, temperature_cubes, snow_cubes, precipitation_cubes, scenario, timeperiod_length, number_of_timeperiods,
+def analyse_temperature_snow(modellist, temperature_cubes, snow_cubes, precipitation_cubes, scenario, timeperiod_length,
+                             number_of_timeperiods,
                              area,
                              historical_start,
                              scenario_start, threshold_temperatures,
@@ -546,15 +552,17 @@ def analyse_temperature_snow(modellist, temperature_cubes, snow_cubes, precipita
                                                          ssp_ensemble_cubelist_temperature, ssp_ensemble_cubelist_snow,
                                                          ssp_ensemble_cubelist_precipitation,
                                                          scenario
-                                                         , threshold_temperatures, timeperiod_length, number_of_timeperiods,
+                                                         , threshold_temperatures, timeperiod_length,
+                                                         number_of_timeperiods,
                                                          historical_start, scenario_start,
                                                          historical=historical, rolling_window=rolling_window)
 
 
 def temperature_analysis(temperature_cubes, snow_cubes, precipitation_cubes, modellist, areas_to_analyse, scenario,
                          scenario_start,
-                         historical_start,timeperiod_length, number_of_timeperiods, threshold_temperatures, historical=True,
-                         rolling_window=False,ensemble=False,ensemblename=''):
+                         historical_start, timeperiod_length, number_of_timeperiods, threshold_temperatures,
+                         historical=True,
+                         rolling_window=False, ensemble=False, ensemblename=''):
     identifier = modellist[0]
     if ensemble:
         identifier = ensemblename
@@ -563,14 +571,15 @@ def temperature_analysis(temperature_cubes, snow_cubes, precipitation_cubes, mod
         results = {
             (identifier, 'preindustrial', i_area): analyse_temperature_snow(modellist, temperature_cubes, snow_cubes,
                                                                             precipitation_cubes,
-                                                                            scenario,timeperiod_length,
+                                                                            scenario, timeperiod_length,
                                                                             number_of_timeperiods,
                                                                             areas_to_analyse[i_area],
                                                                             historical_start,
                                                                             scenario_start, threshold_temperatures,
                                                                             historical=historical,
                                                                             rolling_window=rolling_window)}
-        filename = str('temperature_snow_relation') + '_' + str(identifier) + '_' + str(i_area) + '_baseline_hist_from_' + str(
+        filename = str('temperature_snow_relation') + '_' + str(identifier) + '_' + str(
+            i_area) + '_baseline_hist_from_' + str(
             historical_start) + "_" + scenario + '_from_' + str(scenario_start) + '_' + str(number_of_timeperiods)
 
         file = open(filename, 'wb')
@@ -582,14 +591,17 @@ def simulation_runner(models):
     if (temperature):
         if (baseline == 1):
             # baseline
-            temperature_analysis(tas_cubes, prsn_cubes, pr_cubes, models, arealist, 'historical', baseline_start, baseline_start
-                                 ,timeperiod_length, baseline_decades, threshold_temperatures, historical= False,
-                                 rolling_window=rolling_window,ensemble=ensemble_boolean,ensemblename=identifier_ensemble)
+            temperature_analysis(tas_cubes, prsn_cubes, pr_cubes, models, arealist, 'historical', baseline_start,
+                                 baseline_start
+                                 , timeperiod_length, baseline_decades, threshold_temperatures, historical=False,
+                                 rolling_window=rolling_window, ensemble=ensemble_boolean,
+                                 ensemblename=identifier_ensemble)
 
         if (scenario_analysis == 1):
 
             for i_scenario in tqdm(ssp_scenarios):
-                temperature_analysis(tas_cubes, prsn_cubes, pr_cubes, models, arealist, i_scenario, 2021, baseline_start, timeperiod_length, number_of_ssp_periods,
+                temperature_analysis(tas_cubes, prsn_cubes, pr_cubes, models, arealist, i_scenario, 2021,
+                                     baseline_start, timeperiod_length, number_of_ssp_periods,
                                      threshold_temperatures,
                                      historical=False, rolling_window=rolling_window,
                                      ensemble=ensemble_boolean,
@@ -598,28 +610,33 @@ def simulation_runner(models):
 
         if (full_historical == 1):
             # generate full historical data for comparison
-            temperature_analysis(tas_cubes, prsn_cubes, pr_cubes, models, arealist, 'historical', baseline_end+1,baseline_end+1, timeperiod_length, number_of_historical_periods,
-                                 threshold_temperatures, rolling_window=rolling_window,ensemble=ensemble_boolean,
-                                                          ensemblename=identifier_ensemble)
+            temperature_analysis(tas_cubes, prsn_cubes, pr_cubes, models, arealist, 'historical', baseline_end + 1,
+                                 baseline_end + 1, timeperiod_length, number_of_historical_periods,
+                                 threshold_temperatures, rolling_window=rolling_window, ensemble=ensemble_boolean,
+                                 ensemblename=identifier_ensemble)
 
     else:
         if (baseline == 1):
             multi_region_threshold_analysis_preindustrial(prsn_cubes, models, arealist, 'historical', baseline_start,
                                                           baseline_start,
-                                                          timeperiod_length, baseline_periods, percentiles, historical=False,
+                                                          timeperiod_length, baseline_periods, percentiles,
+                                                          historical=False,
                                                           rolling_window=rolling_window, ensemble=ensemble_boolean,
                                                           ensemblename=identifier_ensemble)
         if (scenario_analysis == 1):
             # generate ssp data (without historical leg, since done in next step
             for i_scenario in tqdm(ssp_scenarios):
-                multi_region_threshold_analysis_preindustrial(prsn_cubes, models, arealist, i_scenario, 2021, 1851, timeperiod_length, number_of_ssp_periods,
+                multi_region_threshold_analysis_preindustrial(prsn_cubes, models, arealist, i_scenario, 2021, 1851,
+                                                              timeperiod_length, number_of_ssp_periods,
                                                               percentiles,
                                                               historical=False, rolling_window=rolling_window,
                                                               ensemble=ensemble_boolean,
                                                               ensemblename=identifier_ensemble)
         if (full_historical == 1):
             # generate full historical data for comparison
-            multi_region_threshold_analysis_preindustrial(prsn_cubes, models, arealist, 'historical', baseline_end+1,baseline_end+1, timeperiod_length, number_of_historical_periods,
+            multi_region_threshold_analysis_preindustrial(prsn_cubes, models, arealist, 'historical', baseline_end + 1,
+                                                          baseline_end + 1, timeperiod_length,
+                                                          number_of_historical_periods,
                                                           percentiles, historical=False, rolling_window=rolling_window,
                                                           ensemble=ensemble_boolean, ensemblename=identifier_ensemble)
 
@@ -659,18 +676,18 @@ outputdir = settings['outputdir']
 scenarios = settings['scenarios']
 ssp_scenarios = settings['ssp_scenarios']
 percentiles = settings['percentiles']
-timeperiod_length = settings ['timeperiod_length']
-number_of_ssp_periods = int(80/timeperiod_length)
+timeperiod_length = settings['timeperiod_length']
+number_of_ssp_periods = int(80 / timeperiod_length)
 
 baseline_start = int(settings['baseline_start'])
 
 baseline = int(settings['baseline'])
 
-baseline_periods = settings ['baseline_periods']
+baseline_periods = settings['baseline_periods']
 baseline_end = baseline_start + baseline_periods * timeperiod_length - 1
 baseline_decades = int((baseline_end - baseline_start + 1) / 10)
 
-number_of_historical_periods = int((2020-baseline_end)/timeperiod_length)
+number_of_historical_periods = int((2020 - baseline_end) / timeperiod_length)
 
 full_historical = int(settings['full_historical'])
 scenario_analysis = int(settings['scenario_analysis'])
