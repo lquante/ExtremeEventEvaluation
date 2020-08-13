@@ -160,7 +160,7 @@ def plot_ratio_cube(cube, scenario_data, modelname, quantile, startyear_data, fi
     # circle = mpath.Path(verts * radius + center)
     # ax.set_boundary(circle, transform=plt.gca().transAxes)y
     if colorbar:
-        cb = plt.colorbar(pcm, shrink=1, extend='both', orientation='horizontal', ax=ax, ticks=levels[0::2])
+        cb = plt.colorbar(pcm, shrink=0.9, extend='both', orientation='horizontal', ax=ax, ticks=levels[0::2])
         cb.ax.tick_params(labelsize=8)
         # label + title to be added in tex
     else:
@@ -196,7 +196,7 @@ def plot_cubelist_ratio_maps(cubelist, varnames, filename, scenario, modelname, 
                 plt.tight_layout()
                 plt.savefig(
                     filename + "_" + scenario + "_" + str(start_year) + "_" + str(final_year) + "_" + str(
-                        i_cube.var_name) + '_' + str(quantile) + '.png',
+                        i_cube.var_name) + '_' + str(quantile) + '.pdf',
                     dpi=300, bbox_inches='tight')
                 plt.close()
 
@@ -225,7 +225,7 @@ def plot_min_max_maps(cubelist, varnames, filename, scenario, modelname, quantil
             plt.tight_layout()
             plt.savefig(
                 filename + "_" + scenario + "_" + str(start_year) + "_" + str(final_year) + "_" + str(
-                    diff_cube.var_name) + '_' + str(quantile) + '.png',
+                    diff_cube.var_name) + '_' + str(quantile) + '.pdf',
                 dpi=300, bbox_inches='tight')
             plt.close()
 
@@ -264,7 +264,7 @@ def plot_start_relative_maps(cubelist, varnames, filename, scenario, modelname, 
                 plt.tight_layout()
                 plt.savefig(
                     filename + "_" + scenario + "_" + str(
-                        diff_cube.var_name) + '_' + str(quantile) + '.png',
+                        diff_cube.var_name) + '_' + str(quantile) + '.pdf',
                     dpi=300, bbox_inches='tight')
                 plt.close()
 
@@ -303,7 +303,7 @@ def plot_contour_start_relative_maps(cubelist, varnames, filename, scenario, mod
                 plt.tight_layout()
                 plt.savefig(
                     filename + "_" + scenario + "_" + str(
-                        diff_cube.var_name) + '_' + str(quantile) + '.png',
+                        diff_cube.var_name) + '_' + str(quantile) + '.pdf',
                     dpi=300, bbox_inches='tight')
                 plt.close()
 
@@ -346,7 +346,7 @@ def plot_cubelist_diff_maps(cubelist, filename, scenario, modelname, quantile):
                                  vmin, vmax, time_cube.var_name)
             plt.savefig(
                 filename + "_" + scenario + "_" + str(start_year) + "_" + str(final_year) + "_" + str(
-                    time_cube.var_name) + '_' + str(quantile) + '.png',
+                    time_cube.var_name) + '_' + str(quantile) + '.pdf',
                 dpi=300, bbox_inches='tight')
 
             plt.close()
@@ -373,7 +373,7 @@ def plot_contribution_maps(cubelist, filename, scenario, modelname, quantile):
                             time_cube.var_name, vmin=vmin, vmax=vmax)
             plt.savefig(
                 filename + "_" + scenario + "_" + str(start_year) + "_" + str(final_year) + "_" + str(
-                    time_cube.var_name) + '_' + str(quantile) + '.png',
+                    time_cube.var_name) + '_' + str(quantile) + '.pdf',
                 dpi=300, bbox_inches='tight')
 
             plt.close()
@@ -391,7 +391,7 @@ def plot_cubelist_average_single(cubelist, filename):
 
         qplt.plot(average)
         filename_individual = filename + "_" + average.var_name
-        plt.savefig(filename_individual + str(i) + '.png', dpi=300, bbox_inches='tight')
+        plt.savefig(filename_individual + str(i) + '.pdf', dpi=300, bbox_inches='tight')
 
         plt.close()
         i = i + 1
@@ -412,7 +412,7 @@ def plot_cubelist_average_single_scenario(ylims, cubelist, filename, var_names, 
 
     # plt.title(title_str)
 
-    plt.savefig(filename + '_' + scenario + '_' + str(datapoint) + '.png', dpi=150, bbox_inches='tight')
+    plt.savefig(filename + '_' + scenario + '_' + str(datapoint) + '.pdf', dpi=150, bbox_inches='tight')
     plt.close()
 
 
@@ -574,7 +574,7 @@ def plot_multiple_variables_multiple_scenario(ylims, cubelist_dict_by_scenario, 
 
     plt.tight_layout()
 
-    plt.savefig(modelname + '_' + filename + '_' + "multi_scenario" + '_' + str(datapoint) + '.png', dpi=300,
+    plt.savefig(modelname + '_' + filename + '_' + "multi_scenario" + '_' + str(datapoint) + '.pdf', dpi=300,
                 bbox_inches='tight')
     plt.close()
 
@@ -585,8 +585,8 @@ def plot_multiple_maps(cubelist_dict, filename, variablenames, mid_interval_year
     number_of_variables = len(variablenames)
     number_of_timepoints = len(mid_interval_years)
 
-    a = 3
-    fig = plt.figure(figsize=(2.5 * a, a * (1 / 5) * number_of_timepoints))
+    a = number_of_variables
+    fig = plt.figure(figsize=(2.5 * a, a * (1 / 5) * 3 / number_of_variables * number_of_timepoints))
     # sort cubelist_dict by variablenames:
     sorted_cubelist_dict = {}
     for i_variable in variablenames:
@@ -642,29 +642,34 @@ def plot_multiple_maps(cubelist_dict, filename, variablenames, mid_interval_year
                             time_cube.var_name, vmin=-absmax_used, vmax=absmax_used, contour=True,
                             axes=ax[int_position - 1], colorbar=cb_boolean)
 
-    # cbar_ax = fig.add_axes([0.25, 0, 0.5, 0.025])
-    # #
-    # fig.colorbar(pcm, shrink=1, extend='both', orientation='horizontal', ticks=levels[0::2],cax=cbar_ax)
+        # cbar_ax = fig.add_axes([0.25, 0, 0.5, 0.025])
+        # #
+        # fig.colorbar(pcm, shrink=1, extend='both', orientation='horizontal', ticks=levels[0::2],cax=cbar_ax)
 
-    if (number_of_variables > 1):
         # add lowercase letters to figure for labelling
         for n, axes in enumerate(ax):
             axes.text(-0.05, 1.05, string.ascii_lowercase[n], transform=axes.transAxes,
-                      size=8, weight='bold')
-    for axes, i_timeperiod in zip(ax[::3], display_timeperiods):
-        # axes.text(-0.1, 1.02, string.ascii_lowercase[n], transform=axes.transAxes,
-        #         size=10, weight='bold')
-        axes.text(-0.4, 0.6, i_timeperiod, transform=axes.transAxes,
-                  size=8)
+                      fontsize=6, weight='bold')
+    # for axes, i_timeperiod in zip(ax[::number_of_variables], display_timeperiods):
+    #     axes.text(-0.4, 0.6, i_timeperiod, transform=axes.transAxes,
+    #               size=8)
 
     # add variablenames to columns
-    display_variablenames = ['mean daily snowfall', str(datapoint) + "th percentile", str(datapoint) + "th EEM"]
+    if (number_of_variables == 3):
+        display_variablenames = ['mean daily snowfall', str(datapoint) + "th percentile", str(datapoint) + "th EEM"]
+
+    if (number_of_variables == 2):
+        display_variablenames = [str(datapoint) + "th percentile", str(datapoint) + "th EEM"]
+
+    if (number_of_variables == 1):
+        display_variablenames = ['mean daily snowfall']
+
     for axes, i_variable in zip(ax, display_variablenames):
         axes.set_title(i_variable, fontsize=10)
     plt.subplots_adjust(wspace=0.2, hspace=0.05)
     fig.tight_layout()
 
-    plt.savefig(modelname + '_' + filename + '_' + "multi_maps" + '_' + str(datapoint) + '.png', dpi=300,
+    plt.savefig(modelname + '_' + filename + '_' + "multi_maps" + '_' + str(datapoint) + '.pdf', dpi=300,
                 bbox_inches='tight')
     plt.close()
 
@@ -768,6 +773,7 @@ def plot_development_multiple_scenarios(ylims, modelname, filelist_dict, arealis
         es_ratio_key = 'EES_' + str(i_datapoint)
         mean_ratio_key = 'mean'
         variable_keys = [mean_ratio_key, percentile_ratio_key, es_ratio_key]
+        extreme_keys = [percentile_ratio_key, es_ratio_key]  # to plot only extrme statistics
         if temperature:
             lower_bound_temperature = np.min(i_datapoint)
             upper_bound_temperature = np.max(i_datapoint)
@@ -784,6 +790,8 @@ def plot_development_multiple_scenarios(ylims, modelname, filelist_dict, arealis
             variable_keys = [days_between_temperature_key]
 
         ratios = []
+        extremes = []
+        mean_only = []
         percentile_bins = [(0, 100)]
         for i_bin in percentile_bins:
             if temperature:
@@ -791,9 +799,11 @@ def plot_development_multiple_scenarios(ylims, modelname, filelist_dict, arealis
             else:
                 for i_variable in variable_keys:
                     ratios.append(i_variable + "_" + str(i_bin[0]) + "_" + str(i_bin[1]))
-            print(ratios)
+                for i_variable in extreme_keys:
+                    extremes.append(i_variable + "_" + str(i_bin[0]) + "_" + str(i_bin[1]))
+                mean_only.append(mean_ratio_key + "_" + str(i_bin[0]) + "_" + str(i_bin[1]))
 
-        no_graphs = False
+        no_graphs = True
         if not no_graphs:
             for i_bin in percentile_bins:
 
@@ -833,6 +843,15 @@ def plot_development_multiple_scenarios(ylims, modelname, filelist_dict, arealis
 
                 plot_multiple_maps(scenario_cubelists[i_scenario], i_scenario + '_start-mid-end_panel_<1000m', ratios,
                                    [2025, 2055, 2095], display_timeperiods, modelname, i_datapoint, mask=elevation_mask)
+                # maps of only mean
+                plot_multiple_maps(scenario_cubelists[i_scenario], i_scenario + '_mean_start-mid-end_panel_<1000m',
+                                   mean_only,
+                                   [2025, 2055, 2095], display_timeperiods, modelname, i_datapoint, mask=elevation_mask)
+                # maps of only extremes
+                plot_multiple_maps(scenario_cubelists[i_scenario], i_scenario + '_extremes_start-mid-end_panel_<1000m',
+                                   extremes,
+                                   [2025, 2055, 2095], display_timeperiods, modelname, i_datapoint, mask=elevation_mask)
+
     # optional analysis of development of different levels of ees in parallel to identify switch of sign of EES trend
     temperature_level_curves = temperature
     if temperature_level_curves:
@@ -887,7 +906,7 @@ def plot_development_multiple_scenarios(ylims, modelname, filelist_dict, arealis
                 plt.plot(x_data, y_data)
                 plt.xlabel("Surface temperature (°C)")
                 plt.ylabel("Change of days in bin (% baseline)")
-                plt.savefig(i_scenario + '_' + str(year) + '_' + "temperature_days_trend_curve" + '.png', dpi=300,
+                plt.savefig(i_scenario + '_' + str(year) + '_' + "temperature_days_trend_curve" + '.pdf', dpi=300,
                             bbox_inches='tight')
                 plt.close()
 
@@ -949,7 +968,7 @@ def plot_levels(name, level_cubes, scenario):
     # ax.set_boundary(circle, transform=plt.gca().transAxes)
     ax.coastlines()
 
-    plt.savefig(scenario + "_" + name + '_level_map.png', dpi=150, bbox_inches='tight')
+    plt.savefig(scenario + "_" + name + '_level_map.pdf', dpi=150, bbox_inches='tight')
     plt.close()
 
 
@@ -977,7 +996,7 @@ def filter_for_country(iso_country_cube, iso_code_index, data_cube, time_dimensi
     print(data_cube.shape)
     print(iso_new_grid_data.shape)
     # iris.quickplot.contourf(iso_country_cube,levels=[0,iso_code_index-1,iso_code_index+1])
-    # plt.savefig(str(iso_code_index)+".png")
+    # plt.savefig(str(iso_code_index)+".pdf")
     # plt.close()
     if time_dimension:
         mask = np.tile((iso_new_grid_data != iso_code_index), (data_cube.shape[0], 1, 1))
@@ -1041,7 +1060,7 @@ def plot_areaboxes(arealist, testcube):
     # ax.set_boundary(circle, transform=plt.gca().transAxes)
     ax.coastlines()
 
-    plt.savefig('region_map.png', dpi=150, bbox_inches='tight')
+    plt.savefig('region_map.pdf', dpi=150, bbox_inches='tight')
     plt.close()
 
 
