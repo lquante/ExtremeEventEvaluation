@@ -16,6 +16,7 @@ from ruamel.yaml import ruamel
 from tqdm import tqdm
 
 
+# method to get results from dictionary classified by scenario, region, and optionally modelname
 def specify_results(resultsdict, modelname, comparisonname, regionname, multimodel=True):
     if multimodel:
         output = resultsdict[modelname, comparisonname, regionname]
@@ -24,60 +25,62 @@ def specify_results(resultsdict, modelname, comparisonname, regionname, multimod
     return output
 
 
-def quantile_collection(results, data_scenario, start_year, final_year, length_timeperiod, rolling_window=False):
+# method to collect data for specific timeperiods from data collection
+def results_collection(results, data_scenario, start_year, final_year, length_timeperiod, rolling_window=False):
     data_timeperiod = final_year - start_year + 1
     number_of_timeperiods = data_timeperiod / length_timeperiod
-    quantile_data = []
+    data = []
     for year in range(start_year, final_year + 1, length_timeperiod):
-        quantile_data.append(results[data_scenario, year, year + length_timeperiod - 1])
+        data.append(results[data_scenario, year, year + length_timeperiod - 1])
     # extension if rolling window data
     if rolling_window:
-        quantile_data = []
+        data = []
         number_of_timeperiods = data_timeperiod - length_timeperiod + 1
         for year in range(start_year, final_year - length_timeperiod + 1 + 1, 1):
-            quantile_data.append(results[data_scenario, year, year + length_timeperiod - 1])
+            data.append(results[data_scenario, year, year + length_timeperiod - 1])
 
-    # prepare quantile cubes
-    quantile_cubelists = {}
+    # prepare data cubes
+    data_cubelists = {}
 
-    for iterator_key in (quantile_data[0].keys()):
+    for iterator_key in (data[0].keys()):
         cubelist = iris.cube.CubeList()
-        for i_data in quantile_data:
+        for i_data in data:
             cubelist.append(i_data[iterator_key])
 
-        quantile_cubelists[iterator_key] = cubelist
+        data_cubelists[iterator_key] = cubelist
 
-    quantile_cubes = {}
+    data_cubes = {}
 
-    for iterator_key in (quantile_cubelists.keys()):
+    for iterator_key in (data_cubelists.keys()):
         print(iterator_key)
-        reference_cube = quantile_cubelists[iterator_key][0] - quantile_cubelists[iterator_key][0]
+        reference_cube = data_cubelists[iterator_key][0] - data_cubelists[iterator_key][0]
         if reference_cube.coords(long_name='year'):
             reference_cube.remove_coord('year')
 
-            for i_cube in quantile_cubelists[iterator_key]:
+            for i_cube in data_cubelists[iterator_key]:
                 reference_cube += i_cube
             time_coord = iris.coords.AuxCoord(start_year + data_timeperiod / 2 - 1,
                                               long_name='year', units='1', bounds=(start_year, final_year))
             reference_cube.add_aux_coord(time_coord)
-            quantile_cubes[iterator_key] = reference_cube
+            data_cubes[iterator_key] = reference_cube
 
-            for i_cube in quantile_cubelists[iterator_key]:
+            for i_cube in data_cubelists[iterator_key]:
                 reference_cube += i_cube
             time_coord = iris.coords.AuxCoord(start_year + data_timeperiod / 2 - 1,
                                               long_name='year', units='1', bounds=(start_year, final_year))
             if reference_cube.coords(long_name='year'):
                 reference_cube.remove_coord('year')
             reference_cube.add_aux_coord(time_coord)
-            quantile_cubes[iterator_key] = reference_cube
+            data_cubes[iterator_key] = reference_cube
 
-    for iterator_key in quantile_cubelists.keys():
-        quantile_cubes[iterator_key] = quantile_cubes[iterator_key] / number_of_timeperiods
+    for iterator_key in data_cubelists.keys():
+        data_cubes[iterator_key] = data_cubes[iterator_key] / number_of_timeperiods
 
-    reference_collection = {'quantiles': quantile_cubes}
+    reference_collection = {'data': data_cubes}
     return reference_collection
 
 
+# calculates average for a list of models and a dictionary with single model data
 def ensemble_average(models, data):
     average = data[models[0]]
     number_of_models = len(models)
@@ -86,6 +89,7 @@ def ensemble_average(models, data):
     return average / number_of_models
 
 
+# concatenates all cubes from a cubedict
 def concatenate_cube_dict(cubedict):
     keys = list(cubedict.keys())
     start_cube = cubedict[keys[0]]
@@ -96,13 +100,7 @@ def concatenate_cube_dict(cubedict):
     return cube_list.concatenate_cube()
 
 
-def mask_close_to_0_values(cube):
-    zero_mask = np.where(cube.data < 10, True, False)
-    cube_masked = cube.copy()
-    cube_masked.data = np.ma.array(cube.data, mask=zero_mask)
-    return cube_masked
-
-
+# calculates baseline relative change values for specified quantiles
 def ensemble_average_quantile_baseline(quantiles_to_calculate, models, ensemblename, results, ref_results,
                                        data_scenario,
                                        starting_years,
@@ -172,30 +170,30 @@ def ensemble_average_quantile_baseline(quantiles_to_calculate, models, ensemblen
 
             for i_model in models:
                 # TODO: balanced approach to get reference period with equally weighted rolling window decades, for now: just average the consecutive decades
-                reference_data[i_model] = quantile_collection(ref_results[i_model],
-                                                              reference_scenario, reference_start_year,
-                                                              reference_final_year, length_timeperiod,
-                                                              rolling_window=False)
-                data[i_model] = quantile_collection(results[i_model], data_scenario, start_year, final_year,
-                                                    length_timeperiod, rolling_window=rolling_window)
-                baseline[i_model] = reference_data[i_model]['quantiles'][quantile_key, quantile_to_calculate]
-                ref_mean[i_model] = reference_data[i_model]['quantiles']['mean']
-                data_mean[i_model] = data[i_model]['quantiles']['mean']
+                reference_data[i_model] = results_collection(ref_results[i_model],
+                                                             reference_scenario, reference_start_year,
+                                                             reference_final_year, length_timeperiod,
+                                                             rolling_window=False)
+                data[i_model] = results_collection(results[i_model], data_scenario, start_year, final_year,
+                                                   length_timeperiod, rolling_window=rolling_window)
+                baseline[i_model] = reference_data[i_model]['data'][quantile_key, quantile_to_calculate]
+                ref_mean[i_model] = reference_data[i_model]['data']['mean']
+                data_mean[i_model] = data[i_model]['data']['mean']
 
-                quantile_dict[i_model] = data[i_model]['quantiles'][quantile_key, quantile_to_calculate]
+                quantile_dict[i_model] = data[i_model]['data'][quantile_key, quantile_to_calculate]
 
-                ref_frequency[i_model] = reference_data[i_model]['quantiles'][frequency_key, quantile_to_calculate]
+                ref_frequency[i_model] = reference_data[i_model]['data'][frequency_key, quantile_to_calculate]
 
-                ref_expected_snowfall[i_model] = reference_data[i_model]['quantiles'][
+                ref_expected_snowfall[i_model] = reference_data[i_model]['data'][
                     mean_exceedance_key, quantile_to_calculate]
                 ref_expected_snowfall[i_model].units = baseline[i_model].units
-                ref_expected_snowfall[i_model] = reference_data[i_model]['quantiles'][
+                ref_expected_snowfall[i_model] = reference_data[i_model]['data'][
                                                      mean_exceedance_key, quantile_to_calculate] + baseline[i_model]
 
-                data_frequency[i_model] = data[i_model]['quantiles'][frequency_key, quantile_to_calculate]
-                data_expected_snowfall[i_model] = data[i_model]['quantiles'][mean_exceedance_key, quantile_to_calculate]
+                data_frequency[i_model] = data[i_model]['data'][frequency_key, quantile_to_calculate]
+                data_expected_snowfall[i_model] = data[i_model]['data'][mean_exceedance_key, quantile_to_calculate]
                 data_expected_snowfall[i_model].units = baseline[i_model].units
-                data_expected_snowfall[i_model] = data[i_model]['quantiles'][
+                data_expected_snowfall[i_model] = data[i_model]['data'][
                                                       mean_exceedance_key, quantile_to_calculate] + baseline[i_model]
 
             unmasked_ref_mean = ensemble_average(models, ref_mean)
@@ -279,6 +277,7 @@ def ensemble_average_quantile_baseline(quantiles_to_calculate, models, ensemblen
     return dict_to_plot
 
 
+# calculates baseline relative change values for specified temperatures
 def ensemble_average_temperature(temperatures, models, ensemblename, results, ref_results, data_scenario,
                                  starting_years,
                                  length_timeperiod, reference_scenario, reference_start_year,
@@ -327,26 +326,26 @@ def ensemble_average_temperature(temperatures, models, ensemblename, results, re
             print(final_year)
             for i_model in models:
                 # TODO: balanced approach to get reference period with equally weighted rolling window decades, for now: just average the consecutive decades
-                reference_data[i_model] = quantile_collection(ref_results[i_model],
-                                                              reference_scenario, reference_start_year,
-                                                              reference_final_year, length_timeperiod,
-                                                              rolling_window=False)
-                data[i_model] = quantile_collection(results[i_model], data_scenario, start_year, final_year,
-                                                    length_timeperiod, rolling_window=rolling_window)
+                reference_data[i_model] = results_collection(ref_results[i_model],
+                                                             reference_scenario, reference_start_year,
+                                                             reference_final_year, length_timeperiod,
+                                                             rolling_window=False)
+                data[i_model] = results_collection(results[i_model], data_scenario, start_year, final_year,
+                                                   length_timeperiod, rolling_window=rolling_window)
 
-                ref_days_between_temperature[i_model] = reference_data[i_model]['quantiles'][
+                ref_days_between_temperature[i_model] = reference_data[i_model]['data'][
                     days_between_temperature_key, str(temperature)]
-                data_days_between_temperature[i_model] = data[i_model]['quantiles'][
+                data_days_between_temperature[i_model] = data[i_model]['data'][
                     days_between_temperature_key, str(temperature)]
 
-                ref_mean_snow_between_temperature[i_model] = reference_data[i_model]['quantiles'][
+                ref_mean_snow_between_temperature[i_model] = reference_data[i_model]['data'][
                     mean_snow_between_temperature_key, str(temperature)]
-                data_mean_snow_between_temperature[i_model] = data[i_model]['quantiles'][
+                data_mean_snow_between_temperature[i_model] = data[i_model]['data'][
                     mean_snow_between_temperature_key, str(temperature)]
 
-                ref_mean_precipitation[i_model] = reference_data[i_model]['quantiles'][
+                ref_mean_precipitation[i_model] = reference_data[i_model]['data'][
                     mean_precipitation_key]
-                data_mean_precipitation[i_model] = data[i_model]['quantiles'][
+                data_mean_precipitation[i_model] = data[i_model]['data'][
                     mean_precipitation_key]
 
             # add time coordinate to identify scenario decade from which the difference stems, to prepare timeplots of development
@@ -416,9 +415,10 @@ def ensemble_average_temperature(temperatures, models, ensemblename, results, re
     return dict_to_plot
 
 
+# initializes calculation of metrics for specified models, scenarios, scenario, area, starting years, timeperiods
 def ensemble_plotting_average(models, data_scenarios, data_to_calculate, data_results, reference_results,
                               comparisonname, areaname,
-                              starting_years, length_timerperiod, rolling_window=False, temperature=False):
+                              starting_years, length_timeperiod, rolling_window=False, temperature=False):
     ensemble_results = {}
     ref_ensemble_results = {}
     for i_model in models:
@@ -439,16 +439,17 @@ def ensemble_plotting_average(models, data_scenarios, data_to_calculate, data_re
             if not temperature:
                 plotting_data[i_scenario, i_reference_scenario] = ensemble_average_quantile_baseline(
                     data_to_calculate, models, 'ensemble', ensemble_results, ref_ensemble_results, i_scenario,
-                    starting_years, length_timerperiod,
+                    starting_years, length_timeperiod,
                     i_reference_scenario, baseline_start, baseline_end, rolling_window=rolling_window)
             else:
                 plotting_data[i_scenario, i_reference_scenario] = ensemble_average_temperature(
                     data_to_calculate, models, 'ensemble', ensemble_results, ref_ensemble_results, i_scenario,
-                    starting_years, length_timerperiod,
+                    starting_years, length_timeperiod,
                     i_reference_scenario, baseline_start, baseline_end, rolling_window=rolling_window)
     return plotting_data
 
 
+# loads results from a list of pickle files
 def load_results(filelist):
     partial_results = []
     for i_file in filelist:

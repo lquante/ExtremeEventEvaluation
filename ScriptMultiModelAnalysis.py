@@ -720,9 +720,9 @@ if (temperature):
             pr_cubes[i_model, i_scenario] = load_from_nc(filelist_pr[i_scenario][i_model], 'precipitation_flux', 30)
     if ('ssp585' in scenarios):
         for i_model in models:
-            unify_current_decade(tas_cubes, i_model, 'ssp585')
-            unify_current_decade(prsn_cubes, i_model, 'ssp585')
-            unify_current_decade(pr_cubes, i_model, 'ssp585')
+            tas_cubes[i_model, i_scenario] = unify_current_decade(tas_cubes, i_model, 'ssp585')
+            prsn_cubes[i_model, i_scenario] = unify_current_decade(prsn_cubes, i_model, 'ssp585')
+            pr_cubes[i_model, i_scenario] = unify_current_decade(pr_cubes, i_model, 'ssp585')
 
 else:
     prsn_cubes = {}
@@ -731,7 +731,9 @@ else:
             prsn_cubes[i_model, i_scenario] = load_from_nc(filelist_prsn[i_scenario][i_model], variable_key, 0)
     # TODO: flexible extension of historical data with respective ssp, but should not make a big difference
     for i_model in models:
-        prsn_cubes = unify_current_decade(prsn_cubes, i_model, 'ssp585')
+        if ('ssp585' in scenarios):
+            for i_model in models:
+                prsn_cubes[i_model, i_scenario] = unify_current_decade(prsn_cubes, i_model, 'ssp585')
 
 # ignore warnings
 warnings.simplefilter("ignore")

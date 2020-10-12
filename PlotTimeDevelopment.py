@@ -13,6 +13,7 @@ from datetime import datetime
 import cartopy
 import cartopy.io
 import cf_units
+import cftime
 import iris
 import iris.analysis
 import iris.coord_categorisation
@@ -22,6 +23,7 @@ import matplotlib.colors as clr
 import matplotlib.dates as mdates
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
 import numpy as np
 import pandas as pd
 from iris.util import unify_time_units
@@ -435,21 +437,28 @@ def plot_cubelist_average(cubelist, var_names, color,
                           population=False, label="label", fmt="x", mask=None, temperature=False):
     for i_cube in cubelist:
         if i_cube.var_name in var_names:
-            weights = generate_weights(i_cube, population=population)
+            area_weights = generate_weights(i_cube, population=False)
+            population_weights = generate_weights(i_cube, population=population)
+            if population == False:
+                weights = area_weights
+            else:
+                weights = population_weights
             if mask is None:
-                pi = 3.14
+                weights = weights
             else:
                 # set weights of masked areas to 0
                 weights = weights * np.invert(mask)
-            average = i_cube.collapsed(('latitude', 'longitude'), iris.analysis.MEAN, weights=weights)
-
+            # convert to percentage change:
             # compute change of ratio compared to baseline ==1
-            one_cube = average.copy(data=np.ones(average.data.shape))
-            change_value = (average - one_cube) * 100  # scale to percent
+            one_cube = i_cube.copy(data=np.ones(i_cube.data.shape))
+            change_value = (i_cube - one_cube) * 100  # scale to percent
+
+            average = change_value.collapsed(('latitude', 'longitude'), iris.analysis.MEAN, weights=weights)
+
             if 'models' in label:
-                iplt.plot(change_value, fmt, lw='0.35', label=label, color=color, linestyle='solid')
+                iplt.plot(average, fmt, lw='0.35', label=label, color=color, linestyle='solid')
             else:
-                iplt.plot(change_value, fmt, lw='0.35', label=label, color=color)
+                iplt.plot(average, fmt, lw='0.35', label=label, color=color)
             varname_part = re.search('([a-zA-Z]+)(.*)', i_cube.var_name).group(1)
             if temperature:
                 if "days" in varname_part:
@@ -504,6 +513,8 @@ def add_plot_summary_statistics(axes, ylims):
     axes.relim()
     # update ax.viewLim using the new dataLim
     axes.autoscale_view()
+    # return dataframe for further stats
+    return dataframe
 
 
 # plot data from mulitple scenarios / models
@@ -524,12 +535,13 @@ def plot_variable_multiple_scenarios(cubelist_dict_by_scenario, var_name, scenar
 # plot data from mulitple scenarios / models and add median and likely range
 def plot_multiple_variables_multiple_scenario(ylims, cubelist_dict_by_scenario, filename, variablenames, modelname,
                                               areaname, scenarios, scenario_colors, datapoint,
-                                              population=False, temperature=False, elevation_mask_level=None):
+                                              population=False, temperature=False, elevation_mask_level=None,
+                                              populationbinning=False):
     number_of_variables = len(variablenames)
     number_of_rows = 1
     number_of_columns = int(number_of_variables / number_of_rows)
-
-    fig = plt.figure(figsize=(number_of_variables * 4, 4))
+    dataframes = {}
+    fig = plt.figure(figsize=(number_of_variables * 4, 4 * number_of_rows))
 
     ax = []
     ax.append(fig.add_subplot(number_of_rows, number_of_columns, 1))
@@ -537,7 +549,7 @@ def plot_multiple_variables_multiple_scenario(ylims, cubelist_dict_by_scenario, 
     plot_variable_multiple_scenarios(cubelist_dict_by_scenario, variablenames[0], scenarios, scenario_colors,
                                      population=population, elevation_mask_level=elevation_mask_level,
                                      temperature=temperature)
-    add_plot_summary_statistics(plt.gca(), ylims)
+    dataframes[variablenames[0]] = add_plot_summary_statistics(plt.gca(), ylims)
 
     position = range(1, number_of_variables + 1)
 
@@ -547,7 +559,7 @@ def plot_multiple_variables_multiple_scenario(ylims, cubelist_dict_by_scenario, 
         plot_variable_multiple_scenarios(cubelist_dict_by_scenario, variablenames[k], scenarios, scenario_colors,
                                          population=population, elevation_mask_level=elevation_mask_level,
                                          temperature=temperature)
-        add_plot_summary_statistics(plt.gca(), ylims)
+        dataframes[variablenames[k]] = add_plot_summary_statistics(plt.gca(), ylims)
 
     title_str = (modelname + " percentile: " + str(
         datapoint) + " " + areaname)
@@ -579,6 +591,116 @@ def plot_multiple_variables_multiple_scenario(ylims, cubelist_dict_by_scenario, 
     plt.close()
 
 
+def binned_cube_dataframe(cube,
+                          population=False, mask=None, bins=None):
+    weights = generate_weights(cube, population=population)
+    if mask is None:
+        weights = weights
+    else:
+        # set weights of masked areas to 0
+        weights = weights * np.invert(mask)
+
+    lower_bound = -25
+    upper_bound = -lower_bound
+    number_of_bins = 5
+    binsize = upper_bound * 2 / number_of_bins
+    bins = np.arange(lower_bound, upper_bound, binsize)
+    in_bin = {}
+    # compute change of ratio compared to baseline ==1
+    one_cube = cube.copy(data=np.ones(cube.data.shape))
+    change_value = (cube - one_cube) * 100  # scale to percent
+
+    lower_bounding = np.ones(change_value.data.shape) * bins[0]
+    comparison_cube = change_value.copy(data=change_value.data <= lower_bounding)
+    in_bin[bins[0]] = comparison_cube.collapsed(('latitude', 'longitude'), iris.analysis.MEAN,
+                                                weights=weights) * 100
+
+    for i_bin in bins:
+        lower_bound = np.ones(change_value.data.shape) * i_bin
+        upper_bound = np.ones(change_value.data.shape) * (i_bin + binsize)
+        binned_cube = change_value.copy(data=(lower_bound < change_value.data) * (change_value.data <= upper_bound))
+        in_bin[(i_bin, i_bin + binsize)] = binned_cube.collapsed(('latitude', 'longitude'), iris.analysis.MEAN,
+                                                                 weights=weights) * 100
+
+    upper_bounding = np.ones(change_value.data.shape) * (bins.max() + binsize)
+    comparison_cube = change_value.copy(data=change_value.data > upper_bounding)
+    in_bin[bins[len(bins) - 1]] = comparison_cube.collapsed(('latitude', 'longitude'),
+                                                            iris.analysis.MEAN,
+                                                            weights=weights) * 100
+    keys = list(in_bin.keys())
+    number_of_bins_extended = len(keys)
+    x_data = in_bin[bins[0]].coord('scenario_year').cells()
+    x_datetime = []
+    for i_data in x_data:
+        num_date = cftime.date2num(i_data[0], 'days since 1-01-01', calendar='proleptic_gregorian')
+        datetime = cftime.num2pydate(num_date, 'days since 1-01-01', calendar='proleptic_gregorian')
+        x_datetime.append(datetime)
+    y_data = {}
+    for i in range(0, number_of_bins_extended):
+        y_data[i] = in_bin[keys[i]].data
+
+    dataFrame = pd.DataFrame(data=y_data)
+    dataFrame.index = x_datetime
+    return dataFrame
+
+
+def plot_binned_stats_scenario(cubelist_dict_by_scenario, filename, areaname, variablenames, modelname,
+                               scenarios, datapoint,
+                               population=False, elevation_mask_level=None):
+    number_of_variables = len(variablenames)
+    for i_scenario in scenarios:
+        # generate mask of elevation of 1000
+        if (elevation_mask_level is None):
+            elevation_mask = None
+        else:
+            elevation_mask = generate_elevation_mask(elevation_cube, cubelist_dict_by_scenario[i_scenario][0],
+                                                     elevation_mask_level)
+        for i_variable in variablenames:
+            for i_cube in cubelist_dict_by_scenario[i_scenario]:
+                if i_cube.var_name == i_variable:
+
+                    binnedData = binned_cube_dataframe(i_cube, population=population,
+                                                       mask=elevation_mask)
+                    lower_bound = -25
+                    upper_bound = -lower_bound
+                    number_of_bins = 5
+                    binsize = upper_bound * 2 / number_of_bins
+                    bins = np.arange(lower_bound, upper_bound + binsize, binsize)
+
+                    bounds = bins
+                    number_of_extended_bins = number_of_bins + 2
+
+                    # create customized color map to have fitting extension of colorbar
+                    cmap = plt.get_cmap('RdBu_r', number_of_extended_bins)
+                    colorspace = plt.cm.RdBu_r(np.linspace(0.1, 0.9), number_of_extended_bins)
+                    cmap_cut = clr.LinearSegmentedColormap.from_list('RdBu_r_cut',
+                                                                     colorspace, N=number_of_extended_bins)
+                    norm = clr.BoundaryNorm(boundaries=bounds, ncolors=number_of_extended_bins, clip=False)
+                    cmap_cut.set_under(plt.cm.RdBu_r(0))
+                    cmap_cut.set_over(plt.cm.RdBu_r(0.99))
+
+                    binnedData.plot.area(stacked=True, colormap=cmap, legend=None, lw=0)
+                    # plt.colorbar(plt.cm.ScalarMappable(cmap=cmap_cut, norm=norm), orientation='horizontal',extend='both')
+
+                    plt.xlabel("Years")
+                    if population:
+                        plt.ylabel("Population weighted percentage of cells in resp. bin")
+                    else:
+                        plt.ylabel("Area weighted percentage of cells in resp. bin")
+
+                    varname_part = re.search('([a-zA-Z]+)(.*)', i_cube.var_name).group(1)
+                    if "EES" == varname_part:
+                        varname_part = "EEM"
+
+                    plt.margins(x=0, y=0)
+                    plt.gca().yaxis.set_major_formatter(mticker.PercentFormatter())
+
+                    plt.savefig(
+                        str(i_variable) + "_" + modelname + '_' + filename + '_' + "stacked_area_plot" + '_' + str(
+                            datapoint) + '_' + str(i_scenario) + '.pdf', dpi=300, bbox_inches='tight', block=True)
+                    plt.close()
+
+
 # plot maps for multiple dates
 def plot_multiple_maps(cubelist_dict, filename, variablenames, mid_interval_years, display_timeperiods, modelname,
                        datapoint, mask=None):
@@ -607,7 +729,7 @@ def plot_multiple_maps(cubelist_dict, filename, variablenames, mid_interval_year
         i_timepoint = timepoints[j]
         timeconstraint = iris.Constraint(scenario_year=i_timepoint)
         year = i_timepoint[0].year
-        absmax = 30
+        absmax = 50
 
         for k in range(0, number_of_variables):
             int_position = int_position + 1
@@ -618,7 +740,7 @@ def plot_multiple_maps(cubelist_dict, filename, variablenames, mid_interval_year
 
             # adjust vmax to variable:
             if "EES" in i_variable:
-                absmax_used = absmax - 15
+                absmax_used = absmax / 2
             if "percentile" in i_variable:
                 absmax_used = absmax
             if "mean" in i_variable:
@@ -803,32 +925,29 @@ def plot_development_multiple_scenarios(ylims, modelname, filelist_dict, arealis
                     extremes.append(i_variable + "_" + str(i_bin[0]) + "_" + str(i_bin[1]))
                 mean_only.append(mean_ratio_key + "_" + str(i_bin[0]) + "_" + str(i_bin[1]))
 
-        no_graphs = True
-        if not no_graphs:
-            for i_bin in percentile_bins:
+        for i_bin in percentile_bins:
 
-                for i_area in areanames:
+            for i_area in areanames:
 
-                    # test population weighting
-                    print(i_area)
-                    if populationweighting:
-                        plot_multiple_variables_multiple_scenario(ylims, area_cubes[i_area],
-                                                                  str(i_area + '_population_weighted'),
-                                                                  ratios,
-                                                                  modelname + "_population_weighted",
-                                                                  i_area, scenarios, scenario_colors, i_datapoint,
-                                                                  population=population_cubes[i_area],
-                                                                  temperature=temperature)
-                        print(i_area + "population finished")
-                    plot_multiple_variables_multiple_scenario(ylims, area_cubes[i_area], str(
-                        i_area + '_ratios_<1000m_' + str(i_bin[0]) + "_" + str(i_bin[1])), ratios, modelname,
-                                                              i_area, scenarios, scenario_colors, i_datapoint,
-                                                              temperature=temperature, elevation_mask_level=1000)
-                    plot_multiple_variables_multiple_scenario(ylims, area_cubes[i_area], str(
-                        i_area + '_ratios_' + str(i_bin[0]) + "_" + str(i_bin[1])), ratios, modelname,
-                                                              i_area, scenarios, scenario_colors, i_datapoint,
-                                                              temperature=temperature)
+                # test population weighting
+                print(i_area)
 
+                plot_multiple_variables_multiple_scenario(ylims, area_cubes[i_area], str(
+                    i_area + '_ratios_<1000m_' + str(i_bin[0]) + "_" + str(i_bin[1])), ratios, modelname,
+                                                          i_area, scenarios, scenario_colors, i_datapoint,
+                                                          temperature=temperature, elevation_mask_level=1000)
+                plot_multiple_variables_multiple_scenario(ylims, area_cubes[i_area], str(
+                    i_area + '_ratios_' + str(i_bin[0]) + "_" + str(i_bin[1])), ratios, modelname,
+                                                          i_area, scenarios, scenario_colors, i_datapoint,
+                                                          temperature=temperature)
+                if populationweighting:
+                    plot_binned_stats_scenario(area_cubes[i_area], str(i_area + '_population_weighted_<1000'), i_area,
+                                               ratios, modelname,
+                                               scenarios, i_datapoint,
+                                               population=population_cubes[i_area], elevation_mask_level=1000)
+                plot_binned_stats_scenario(area_cubes[i_area], str(i_area + '_area_weighted_<1000'), i_area,
+                                           ratios, modelname,
+                                           scenarios, i_datapoint, elevation_mask_level=1000)
         if temperature:
             maps = False
         if maps:
@@ -1058,7 +1177,8 @@ def plot_areaboxes(arealist, testcube):
     # verts = np.vstack([np.sin(theta), np.cos(theta)]).T
     # circle = mpath.Path(verts * radius + center)
     # ax.set_boundary(circle, transform=plt.gca().transAxes)
-    ax.coastlines()
+    ax.coastlines('110m', linewidth=0.2)
+    ax.outline_patch.set_linewidth(0.00)
 
     plt.savefig('region_map.pdf', dpi=150, bbox_inches='tight')
     plt.close()
