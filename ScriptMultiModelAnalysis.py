@@ -76,7 +76,6 @@ def generate_quantile_exceedance_development(cubelist, baselinequantiles, quanti
     results = {}
     cuberesults = {}
     number_of_cubes = len(cubelist)
-    number_of_timepoints = 0
     for iterator_key in cubelist.keys():
         # calculate some metrics per cube from cubelist
         data = {}
@@ -173,7 +172,7 @@ def calculate_quantile_exceedance_measure(historical_cubelist, ssp_cubelist, ssp
             ssp_start_list.append(ssp_start_list[index - 1] + number_of_years_to_compare)
 
     num_cores = int(multiprocessing.cpu_count() / 4)
-    if (ensemble_boolean):
+    if ensemble_boolean:
         num_cores = int(multiprocessing.cpu_count() / 8)
     historical_starts = tqdm(historical_start_list)
     data = {}
@@ -256,7 +255,7 @@ def percentile_from_cubedict(cubedict, percentile, startyear, finalyear, year=Fa
         dataarray = np.concatenate((dataarray, extract_dates(cubedict[keys[i]], startyear, finalyear, year=year).data),
                                    axis=0)
 
-    if (nan_percentile):
+    if nan_percentile:
         percentile_data = percentile_data = np.nanpercentile(dataarray, percentile, axis=0)
     else:
         percentile_data = np.percentile(dataarray, percentile, axis=0)
@@ -411,7 +410,7 @@ def generate_temperature_snow_development(cubelist_temperature, cubelist_snow, c
 
         # get precipitation stats for comparison
         mean_precipitation = precipitation_timeperiod.collapsed('time', iris.analysis.MEAN)
-        mean_precipitation.var_name = ('mean_pr')
+        mean_precipitation.var_name = 'mean_pr'
         data['mean_precipitation'] = mean_precipitation
         cuberesults[model_key] = data
     # sum up results from separate model cubes into a single cube
@@ -465,7 +464,7 @@ def calculate_snowfall_below_temperature_measures(historical_ensemble_cubelist_t
             scenario_start_list.append(scenario_start_list[index - 1] + number_of_years_to_compare)
 
     num_cores = int(multiprocessing.cpu_count() / 4)
-    if (ensemble_boolean):
+    if ensemble_boolean:
         num_cores = int(multiprocessing.cpu_count() / 8)
 
     historical_starts = tqdm(historical_start_list)
@@ -588,8 +587,8 @@ def temperature_analysis(temperature_cubes, snow_cubes, precipitation_cubes, mod
 
 # TODO: more elegant parametrization
 def simulation_runner(models):
-    if (temperature):
-        if (baseline == 1):
+    if temperature:
+        if baseline == 1:
             # baseline
             temperature_analysis(tas_cubes, prsn_cubes, pr_cubes, models, arealist, 'historical', baseline_start,
                                  baseline_start
@@ -597,7 +596,7 @@ def simulation_runner(models):
                                  rolling_window=rolling_window, ensemble=ensemble_boolean,
                                  ensemblename=identifier_ensemble)
 
-        if (scenario_analysis == 1):
+        if scenario_analysis == 1:
 
             for i_scenario in tqdm(ssp_scenarios):
                 temperature_analysis(tas_cubes, prsn_cubes, pr_cubes, models, arealist, i_scenario, 2021,
@@ -608,7 +607,7 @@ def simulation_runner(models):
                                      ensemblename=identifier_ensemble
                                      )
 
-        if (full_historical == 1):
+        if full_historical == 1:
             # generate full historical data for comparison
             temperature_analysis(tas_cubes, prsn_cubes, pr_cubes, models, arealist, 'historical', baseline_end + 1,
                                  baseline_end + 1, timeperiod_length, number_of_historical_periods,
@@ -616,14 +615,14 @@ def simulation_runner(models):
                                  ensemblename=identifier_ensemble)
 
     else:
-        if (baseline == 1):
+        if baseline == 1:
             multi_region_threshold_analysis_preindustrial(prsn_cubes, models, arealist, 'historical', baseline_start,
                                                           baseline_start,
                                                           timeperiod_length, baseline_periods, percentiles,
                                                           historical=False,
                                                           rolling_window=rolling_window, ensemble=ensemble_boolean,
                                                           ensemblename=identifier_ensemble)
-        if (scenario_analysis == 1):
+        if scenario_analysis == 1:
             # generate ssp data (without historical leg, since done in next step
             for i_scenario in tqdm(ssp_scenarios):
                 multi_region_threshold_analysis_preindustrial(prsn_cubes, models, arealist, i_scenario, 2021, 1851,
@@ -632,7 +631,7 @@ def simulation_runner(models):
                                                               historical=False, rolling_window=rolling_window,
                                                               ensemble=ensemble_boolean,
                                                               ensemblename=identifier_ensemble)
-        if (full_historical == 1):
+        if full_historical == 1:
             # generate full historical data for comparison
             multi_region_threshold_analysis_preindustrial(prsn_cubes, models, arealist, 'historical', baseline_end + 1,
                                                           baseline_end + 1, timeperiod_length,
@@ -706,7 +705,7 @@ filelist_prsn = settings['files']
 filelist_pr = settings['files']
 
 # modified data import directly from isimip *.nc files
-if (temperature):
+if temperature:
 
     # load data
     tas_cubes = {}
@@ -718,7 +717,7 @@ if (temperature):
             tas_cubes[i_model, i_scenario] = load_from_nc(filelist_tas[i_scenario][i_model], 'air_temperature', 30)
             prsn_cubes[i_model, i_scenario] = load_from_nc(filelist_prsn[i_scenario][i_model], 'snowfall_flux', 30)
             pr_cubes[i_model, i_scenario] = load_from_nc(filelist_pr[i_scenario][i_model], 'precipitation_flux', 30)
-    if ('ssp585' in scenarios):
+    if 'ssp585' in scenarios:
         for i_model in models:
             tas_cubes[i_model, i_scenario] = unify_current_decade(tas_cubes, i_model, 'ssp585')
             prsn_cubes[i_model, i_scenario] = unify_current_decade(prsn_cubes, i_model, 'ssp585')
@@ -731,7 +730,7 @@ else:
             prsn_cubes[i_model, i_scenario] = load_from_nc(filelist_prsn[i_scenario][i_model], variable_key, 0)
     # TODO: flexible extension of historical data with respective ssp, but should not make a big difference
     for i_model in models:
-        if ('ssp585' in scenarios):
+        if 'ssp585' in scenarios:
             for i_model in models:
                 prsn_cubes[i_model, i_scenario] = unify_current_decade(prsn_cubes, i_model, 'ssp585')
 
@@ -759,7 +758,7 @@ arealist = {'NORTHERN_HEMISPHERE': northern_hemisphere}
 
 # run on all models if ensemble
 
-if (ensemble_boolean):
+if ensemble_boolean:
 
     simulation_runner(models)
 

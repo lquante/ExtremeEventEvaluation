@@ -101,7 +101,7 @@ def concatenate_cube_dict(cubedict):
 
 
 # calculates baseline relative change values for specified quantiles
-def ensemble_average_quantile_baseline(quantiles_to_calculate, models, ensemblename, results, ref_results,
+def ensemble_average_quantile_baseline(quantiles_to_calculate, models, results, ref_results,
                                        data_scenario,
                                        starting_years,
                                        length_timeperiod, reference_scenario, reference_start_year,
@@ -113,23 +113,16 @@ def ensemble_average_quantile_baseline(quantiles_to_calculate, models, ensemblen
         baseline = {}
 
         quantile_dict = {}
-        ref_exceedances = {}
         ref_mean = {}
-        ref_relevance_mask = {}
         ref_frequency = {}
         ref_expected_snowfall = {}
-        data_exceedances = {}
         data_mean = {}
         data_frequency = {}
         data_expected_snowfall = {}
-        diff_frequency = {}
-        diff_expected_snowfall = {}
 
         quantile_key = "quantile"
-        exceedance_key = "exceedance"
         frequency_key = 'number_exceedances'
         mean_exceedance_key = 'mean_exceedance'
-        relative_mean_exceedance_key = 'baseline_relative_mean_exceedance'
 
         baseline_average = {}
         quantile_average = {}
@@ -144,15 +137,9 @@ def ensemble_average_quantile_baseline(quantiles_to_calculate, models, ensemblen
 
         ref_mean_average = {}
         data_mean_average = {}
-        diff_mean_average = {}
         mean_ratios = {}
         frequency_ratios = {}
-        diff_frequency_average = {}
-        diff_expected_snowfall_average = {}
 
-        diff_expected_snowfall_average_relative = {}
-        ref_ensemble_exceedances = {}
-        data_ensemble_exceedances = {}
         for i_start_year in starting_years:
             start_year = i_start_year
             final_year = start_year + length_timeperiod - 1
@@ -197,10 +184,9 @@ def ensemble_average_quantile_baseline(quantiles_to_calculate, models, ensemblen
                                                       mean_exceedance_key, quantile_to_calculate] + baseline[i_model]
 
             unmasked_ref_mean = ensemble_average(models, ref_mean)
-            unmasked_data_mean = ensemble_average(models, data_mean)
 
             # get ocean mask TODO: flexible per model
-            maskfile = open('/p/tmp/quante/ExtremeEventEvaluation/ocean_mask_110', 'rb')
+            maskfile = open(maskfilepath, 'rb')
             ocean_mask = pickle.load(maskfile)
             ocean_masked_ref_mean_average = iris.util.mask_cube(unmasked_ref_mean, ocean_mask)
             np.ma.filled(ocean_masked_ref_mean_average, np.nan)
@@ -278,7 +264,7 @@ def ensemble_average_quantile_baseline(quantiles_to_calculate, models, ensemblen
 
 
 # calculates baseline relative change values for specified temperatures
-def ensemble_average_temperature(temperatures, models, ensemblename, results, ref_results, data_scenario,
+def ensemble_average_temperature(temperatures, models, results, ref_results, data_scenario,
                                  starting_years,
                                  length_timeperiod, reference_scenario, reference_start_year,
                                  reference_final_year, rolling_window=False):
@@ -286,37 +272,30 @@ def ensemble_average_temperature(temperatures, models, ensemblename, results, re
     for temperature in temperatures:
         reference_data = {}
         data = {}
-        baseline = {}
 
         ref_days_between_temperature = {}
-        ref_snow_between_temperature = {}
         ref_mean_snow_between_temperature = {}
         ref_mean_precipitation = {}
 
         data_days_between_temperature = {}
-        data_snow_between_temperature = {}
         data_mean_snow_between_temperature = {}
         data_mean_precipitation = {}
 
         days_between_temperature_key = 'temperature_days'
         mean_snow_between_temperature_key = "mean_snow_between_temperature"
-        snow_between_temperature_key = "snow_between_temperature"
 
         mean_precipitation_key = "mean_precipitation"
 
         ensemble_ref_days_between_temperature = {}
-        ensemble_ref_snow_between_temperature = {}
         ensemble_ref_mean_snow_between_temperature = {}
         ensemble_ref_mean_precipitation = {}
 
         ensemble_data_days_between_temperature = {}
-        ensemble_data_snow_between_temperature = {}
         ensemble_data_mean_snow_between_temperature = {}
         ensemble_data_mean_precipitation = {}
 
         days_between_temperature_ratio = {}
         mean_snow_between_temperature_ratio = {}
-        snow_between_temperature_ratio = {}
         mean_precipitation_ratio = {}
 
         for i_start_year in starting_years:
@@ -438,12 +417,12 @@ def ensemble_plotting_average(models, data_scenarios, data_to_calculate, data_re
         for i_reference_scenario in reference_scenarios:
             if not temperature:
                 plotting_data[i_scenario, i_reference_scenario] = ensemble_average_quantile_baseline(
-                    data_to_calculate, models, 'ensemble', ensemble_results, ref_ensemble_results, i_scenario,
+                    data_to_calculate, models, ensemble_results, ref_ensemble_results, i_scenario,
                     starting_years, length_timeperiod,
                     i_reference_scenario, baseline_start, baseline_end, rolling_window=rolling_window)
             else:
                 plotting_data[i_scenario, i_reference_scenario] = ensemble_average_temperature(
-                    data_to_calculate, models, 'ensemble', ensemble_results, ref_ensemble_results, i_scenario,
+                    data_to_calculate, models, ensemble_results, ref_ensemble_results, i_scenario,
                     starting_years, length_timeperiod,
                     i_reference_scenario, baseline_start, baseline_end, rolling_window=rolling_window)
     return plotting_data
@@ -497,6 +476,8 @@ outputdir = settings['outputdir']
 areanames = settings['areanames']
 scenarios = settings['scenarios']
 modellist = settings['modellist']
+
+maskfilepath = settings['maskfilepath']
 
 baseline_start = settings['baseline_start']
 baseline_end = settings['baseline_end']
@@ -557,7 +538,7 @@ for i_start_years in tqdm(start_years):
                 'preindustrial') + "_" + str(scenario) + "_" + str(ref_scenario) + "_" + str(datapoints) + "_" + str(
                 min_start_year) \
                        + "_" + str(max_start_year) + "_" + str(rolling_window)
-            if (len(datapoints) > 5):
+            if len(datapoints) > 5:
                 filename = 'snow_temperature_stats_' + str(ensemble_name) + "_" + str('global') + "_" + str(
                     'preindustrial') + "_" + str(scenario) + "_" + str(ref_scenario) + "_" + str(
                     'many_temperatures') + "_" + str(
